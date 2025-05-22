@@ -1,5 +1,4 @@
-import React, { useState, ReactNode, useEffect } from "react";
-import axios from "axios";
+import React, { ReactNode } from "react";
 
 const DefaultLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
   return (
