@@ -15,14 +15,7 @@ import {
   Edit3,
   Save,
   Eye,
-  Image,
-  Type,
-  Clock,
   ArrowLeft,
-  ArrowRight,
-  Upload,
-  Download,
-  Database,
 } from "lucide-react";
 
 // Type definitions
@@ -537,9 +530,6 @@ const LessonManagementSystem: React.FC = () => {
     setCurrentSlideIndex,
     setCurrentView,
     saveLesson,
-    addSlide,
-    updateSlide,
-    deleteSlide,
     formatTime,
   }) => {
     // Local state that only updates when explicitly saved
@@ -1119,7 +1109,7 @@ const LessonManagementSystem: React.FC = () => {
 
             {visibleContent.length > 0 && (
               <div className="space-y-8">
-                {visibleContent.map((slide, index) => {
+                {visibleContent.map((slide) => {
                   const isActive = currentTime >= slide.startTime;
 
                   return (
