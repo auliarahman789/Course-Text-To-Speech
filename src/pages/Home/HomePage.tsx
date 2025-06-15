@@ -9,7 +9,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { Settings, RefreshCw, Download, Folder, BarChart3 } from "lucide-react";
+import { RefreshCw, Folder, BarChart3 } from "lucide-react";
 import * as XLSX from "xlsx";
 
 const SimpleExcelDashboard = () => {
@@ -44,11 +44,10 @@ const SimpleExcelDashboard = () => {
 
   const [files, setFiles] = useState<FileData[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [apiKey, setApiKey] = useState(
-    "AIzaSyCpck70AXyXdVj4zePVng7ljzjBNw_ihSo"
+  const [apiKey, setApiKey] = useState(import.meta.env.VITE_API_LINK_KEY || "");
+  const [folderId, setFolderId] = useState(
+    import.meta.env.VITE_API_LINK_ID || ""
   );
-  const [folderId, setFolderId] = useState("1Enhk7uHpxQ2y5fInQztoG-rdUzydABsX");
-  const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState("");
   const [loadingProgress, setLoadingProgress] = useState("");
 
@@ -521,25 +520,6 @@ const SimpleExcelDashboard = () => {
                     {file.chart && renderBarChart(file.chart)}
                   </div>
                 ))}
-            </div>
-          </div>
-        )}
-
-        {/* Empty State */}
-        {!isLoading && files.length === 0 && (
-          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-            <Folder className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">
-              Ready to Process Excel Files
-            </h3>
-
-            <div className="space-x-4">
-              <button
-                onClick={() => setShowSettings(true)}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                Configure Google Drive
-              </button>
             </div>
           </div>
         )}
