@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -139,6 +139,8 @@ const SimpleExcelDashboard = () => {
     };
   };
   useEffect(() => {
+    setApiKey(import.meta.env.VITE_API_LINK_KEY || "");
+    setFolderId(import.meta.env.VITE_API_LINK_ID || "");
     // Automatically fetch files on mount if API key and folder ID are set
     if (apiKey && folderId) {
       fetchGoogleDriveFiles();
