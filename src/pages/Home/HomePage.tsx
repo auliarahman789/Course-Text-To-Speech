@@ -12,18 +12,9 @@ import {
   X,
   Play,
   Download,
-  Volume2, // Add this
-  VolumeX, // Add this
-  Pause,
 } from "lucide-react";
 
 const HomePage = () => {
-  const [isSpeaking, setIsSpeaking] = useState<any>(false);
-  const [isPaused, setIsPaused] = useState<any>(false);
-  const [speechRate, setSpeechRate] = useState<any>(1);
-  const [speechVoice, setSpeechVoice] = useState<any>(null);
-  const [availableVoices, setAvailableVoices] = useState<any[]>([]);
-
   const [slides, setSlides] = useState<any>([
     {
       id: 1,
@@ -56,79 +47,7 @@ const HomePage = () => {
       ],
     },
   ]);
-  const initializeTTS = () => {
-    if ("speechSynthesis" in window) {
-      const voices: any = speechSynthesis.getVoices();
-      setAvailableVoices(voices);
-      if (voices.length > 0 && !speechVoice) {
-        setSpeechVoice(voices[0]);
-      }
-    }
-  };
-  const speakSlideContent = () => {
-    if (!("speechSynthesis" in window)) {
-      alert("Text-to-Speech is not supported in this browser");
-      return;
-    }
 
-    // Stop any current speech
-    speechSynthesis.cancel();
-
-    let textToSpeak = "";
-
-    if (currentSlideData.type === "basic") {
-      // For basic slides, read all text elements
-      currentSlideData.elements?.forEach((element: any) => {
-        if (element.type === "text") {
-          textToSpeak += element.content + ". ";
-        }
-      });
-    } else if (currentSlideData.type === "quiz") {
-      // For quiz slides, read question and choices
-      textToSpeak = `Quiz Question: ${currentSlideData.question}. `;
-      currentSlideData.choices.forEach((choice: any, index: any) => {
-        textToSpeak += `Option ${String.fromCharCode(65 + index)}: ${
-          choice.text
-        }. `;
-      });
-    }
-
-    if (textToSpeak.trim()) {
-      const utterance = new SpeechSynthesisUtterance(textToSpeak);
-      utterance.rate = speechRate;
-      utterance.voice = speechVoice;
-
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        setIsPaused(false);
-      };
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        setIsPaused(false);
-      };
-
-      speechSynthesis.speak(utterance);
-    }
-  };
-
-  const pauseResumeSpeech = () => {
-    if (speechSynthesis.speaking) {
-      if (speechSynthesis.paused) {
-        speechSynthesis.resume();
-        setIsPaused(false);
-      } else {
-        speechSynthesis.pause();
-        setIsPaused(true);
-      }
-    }
-  };
-
-  const stopSpeech = () => {
-    speechSynthesis.cancel();
-    setIsSpeaking(false);
-    setIsPaused(false);
-  };
   const [currentSlide, setCurrentSlide] = useState<any>(0);
   const [selectedElement, setSelectedElement] = useState<any>(null);
   const [isDragging, setIsDragging] = useState<boolean>(false);
@@ -422,19 +341,6 @@ const HomePage = () => {
       setDragStart({ x: mouseX, y: mouseY });
     }
   };
-  useEffect(() => {
-    initializeTTS();
-
-    // Some browsers load voices asynchronously
-    if (speechSynthesis.onvoiceschanged !== undefined) {
-      speechSynthesis.onvoiceschanged = initializeTTS;
-    }
-  }, []);
-
-  // Stop speech when slide changes
-  useEffect(() => {
-    stopSpeech();
-  }, [currentSlide]);
 
   const handleMouseUp = () => {
     setIsDragging(false);
@@ -856,89 +762,14 @@ const HomePage = () => {
             <span>Exit</span>
           </button>
         </div>
-        {/* In presentation mode header, add these buttons */}
-        <div className="flex items-center space-x-2">
-          <button
-            onClick={speakSlideContent}
-            className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-          >
-            <Volume2 size={16} />
-            <span>Speak</span>
-          </button>
 
-          {isSpeaking && (
-            <button
-              onClick={stopSpeech}
-              className="flex items-center space-x-1 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-            >
-              <VolumeX size={16} />
-            </button>
-          )}
-        </div>
         {/* Slide Content */}
         <div className="flex-1 flex items-center justify-center p-8">
           {currentSlideData.type === "basic"
             ? renderBasicSlide()
             : renderQuizSlide()}
         </div>
-        {/* Add this section in the properties panel */}
-        <div className="border-t pt-4 mt-4">
-          <h4 className="text-md font-semibold mb-3">
-            Text-to-Speech Settings
-          </h4>
 
-          <div className="space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Speech Rate
-              </label>
-              <input
-                type="range"
-                min="0.5"
-                max="2"
-                step="0.1"
-                value={speechRate}
-                onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
-                className="w-full"
-              />
-              <div className="text-xs text-gray-500 text-center">
-                {speechRate}x speed
-              </div>
-            </div>
-
-            {availableVoices.length > 0 && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Voice
-                </label>
-                <select
-                  value={speechVoice?.name || ""}
-                  onChange={(e) => {
-                    const voice = availableVoices.find(
-                      (v: any) => v.name === e.target.value
-                    );
-                    setSpeechVoice(voice);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                >
-                  {availableVoices.map((voice) => (
-                    <option key={voice.name} value={voice.name}>
-                      {voice.name} ({voice.lang})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <button
-              onClick={speakSlideContent}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              <Volume2 size={16} />
-              <span>Read Current Slide</span>
-            </button>
-          </div>
-        </div>
         {/* Navigation */}
         <div className="bg-gray-900 p-4 flex items-center justify-center space-x-4">
           <button
@@ -1005,37 +836,6 @@ const HomePage = () => {
               <Download size={16} />
               <span>Export</span>
             </button>
-            {/* TTS Controls - Add these */}
-            <button
-              onClick={speakSlideContent}
-              disabled={isSpeaking && !isPaused}
-              className="flex items-center space-x-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors disabled:opacity-50"
-            >
-              <Volume2 size={16} />
-              <span>Speak</span>
-            </button>
-
-            {/* This button only shows when speech is active */}
-            {isSpeaking && (
-              <button
-                onClick={pauseResumeSpeech}
-                className="flex items-center space-x-1 px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
-              >
-                {isPaused ? <Play size={16} /> : <Pause size={16} />}
-                <span>{isPaused ? "Resume" : "Pause"}</span>
-              </button>
-            )}
-
-            {/* Stop button - only shows when speech is active */}
-            {isSpeaking && (
-              <button
-                onClick={stopSpeech}
-                className="flex items-center space-x-1 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-              >
-                <VolumeX size={16} />
-                <span>Stop</span>
-              </button>
-            )}
 
             {/* Basic Slide Tools */}
             {currentSlideData.type === "basic" && (
@@ -1075,44 +875,7 @@ const HomePage = () => {
                 <span>Delete</span>
               </button>
             )}
-            {/* TTS Controls */}
-            <button
-              onClick={speakSlideContent}
-              disabled={isSpeaking && !isPaused}
-              className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:opacity-50"
-            >
-              <Volume2 size={16} />
-              <span>Speak</span>
-            </button>
 
-            {isSpeaking && (
-              <button
-                onClick={pauseResumeSpeech}
-                className="flex items-center space-x-1 px-3 py-1 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors"
-              >
-                {isPaused ? <Play size={16} /> : <Pause size={16} />}
-                <span>{isPaused ? "Resume" : "Pause"}</span>
-              </button>
-            )}
-
-            {isSpeaking && (
-              <button
-                onClick={stopSpeech}
-                className="flex items-center space-x-1 px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-              >
-                <VolumeX size={16} />
-                <span>Stop</span>
-              </button>
-            )}
-
-            {/* Exit button */}
-            <button
-              onClick={togglePresentationMode}
-              className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-            >
-              <X size={16} />
-              <span>Exit</span>
-            </button>
             {selectedElement && currentSlideData.type === "basic" && (
               <button
                 onClick={deleteElement}
@@ -1177,66 +940,6 @@ const HomePage = () => {
 
           {selectedElementData && currentSlideData.type === "basic" ? (
             <div className="space-y-4">
-              {/* Add this section in the properties panel */}
-              <div className="border-t pt-4 mt-4">
-                <h4 className="text-md font-semibold mb-3">
-                  Text-to-Speech Settings
-                </h4>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Speech Rate
-                    </label>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2"
-                      step="0.1"
-                      value={speechRate}
-                      onChange={(e) =>
-                        setSpeechRate(parseFloat(e.target.value))
-                      }
-                      className="w-full"
-                    />
-                    <div className="text-xs text-gray-500 text-center">
-                      {speechRate}x speed
-                    </div>
-                  </div>
-
-                  {availableVoices.length > 0 && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Voice
-                      </label>
-                      <select
-                        value={speechVoice?.name || ""}
-                        onChange={(e) => {
-                          const voice = availableVoices.find(
-                            (v) => v.name === e.target.value
-                          );
-                          setSpeechVoice(voice);
-                        }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-                      >
-                        {availableVoices.map((voice) => (
-                          <option key={voice.name} value={voice.name}>
-                            {voice.name} ({voice.lang})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={speakSlideContent}
-                    className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-                  >
-                    <Volume2 size={16} />
-                    <span>Read Current Slide</span>
-                  </button>
-                </div>
-              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Font Size
