@@ -22,7 +22,7 @@ const HomePage = () => {
         {
           id: "title-1",
           type: "text",
-          content: "Welcome to Canvas PowerPoint",
+          content: "Lesson Proyek Arul",
           x: 100,
           y: 100,
           width: 600,
@@ -30,18 +30,6 @@ const HomePage = () => {
           fontSize: 48,
           fontWeight: "bold",
           color: "#1f2937",
-        },
-        {
-          id: "content-1",
-          type: "text",
-          content: "Now with Quiz slides! Try adding one.",
-          x: 100,
-          y: 200,
-          width: 500,
-          height: 60,
-          fontSize: 24,
-          fontWeight: "normal",
-          color: "#6b7280",
         },
       ],
     },
@@ -387,7 +375,7 @@ const HomePage = () => {
     const newElement = {
       id: `tts-${Date.now()}`,
       type: "tts",
-      content: "Hello, this is a TTS message.",
+      content: "Acep adalah orang asli homosapien.",
       voice: "default",
       volume: 1,
       rate: 1,
@@ -849,7 +837,9 @@ const HomePage = () => {
       {/* Header */}
       <div className="bg-white shadow-sm border-b px-6 py-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-800">Canvas PowerPoint</h1>
+          <h1 className="text-xl font-bold text-gray-800">
+            Lesson Proyek Arul
+          </h1>
           <div className="flex items-center space-x-2">
             <span className="text-sm text-gray-600">
               Slide {currentSlide + 1} of {slides.length}
