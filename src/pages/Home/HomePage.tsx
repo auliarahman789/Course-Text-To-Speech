@@ -1,1337 +1,1161 @@
-import React, {
-  useState,
-  useRef,
-  useEffect,
-  useMemo,
-  useCallback,
-} from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import {
-  Play,
-  Pause,
-  RotateCcw,
-  Volume2,
+  ChevronLeft,
+  ChevronRight,
   Plus,
   Trash2,
-  Edit3,
-  Save,
-  Eye,
-  ArrowLeft,
+  Type,
+  Image,
+  HelpCircle,
+  Layout,
+  Check,
+  X,
+  Play,
+  Download,
 } from "lucide-react";
 
-// Type definitions
-interface Slide {
-  id: number;
-  startTime: number;
-  title: string;
-  type: "text" | "image" | "formula";
-  content: string;
-  description?: string;
-  bgColor: string;
-  borderColor: string;
-}
+const CanvasPowerPoint = () => {
+  const [slides, setSlides] = useState<any>([
+    {
+      id: 1,
+      type: "basic",
+      elements: [
+        {
+          id: "title-1",
+          type: "text",
+          content: "Welcome to Canvas PowerPoint",
+          x: 100,
+          y: 100,
+          width: 600,
+          height: 80,
+          fontSize: 48,
+          fontWeight: "bold",
+          color: "#1f2937",
+        },
+        {
+          id: "content-1",
+          type: "text",
+          content: "Now with Quiz slides! Try adding one.",
+          x: 100,
+          y: 200,
+          width: 500,
+          height: 60,
+          fontSize: 24,
+          fontWeight: "normal",
+          color: "#6b7280",
+        },
+      ],
+    },
+  ]);
 
-interface Lesson {
-  id: number;
-  title: string;
-  ttsText: string;
-  totalDuration: number;
-  slides: Slide[];
-}
+  const [currentSlide, setCurrentSlide] = useState<any>(0);
+  const [selectedElement, setSelectedElement] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<any>({ x: 0, y: 0 });
+  const [resizeHandle, setResizeHandle] = useState<any>("");
+  const [showSlideTypeModal, setShowSlideTypeModal] = useState<any>(false);
+  const [isPresentationMode, setIsPresentationMode] = useState<any>(false);
+  const [quizAnswers, setQuizAnswers] = useState<any>({});
+  const [showQuizResults, setShowQuizResults] = useState<any>(false);
+  const canvasRef = useRef<any>(null);
+  const fileInputRef = useRef<any>(null);
 
-interface EditingLesson {
-  id: number;
-  title: string;
-  ttsText: string;
-  totalDuration: number;
-  slides: Slide[];
-}
+  const addSlide: any = (slideType = "basic") => {
+    let newSlide: any;
 
-type ViewType = "database" | "editor" | "preview";
-type SlideType = "text" | "image" | "formula";
-type ColorTheme =
-  | "bg-gray-50"
-  | "bg-blue-50"
-  | "bg-green-50"
-  | "bg-yellow-50"
-  | "bg-purple-50"
-  | "bg-pink-50";
+    if (slideType === "basic") {
+      newSlide = {
+        id: Date.now(),
+        type: "basic",
+        elements: [
+          {
+            id: `title-${Date.now()}`,
+            type: "text",
+            content: "New Slide Title",
+            x: 100,
+            y: 100,
+            width: 500,
+            height: 80,
+            fontSize: 36,
+            fontWeight: "bold",
+            color: "#1f2937",
+          },
+        ],
+      };
+    } else {
+      newSlide = {
+        id: Date.now(),
+        type: "quiz",
+        question: "Enter your question here",
+        choices: [
+          { id: 1, text: "Option A", isCorrect: true },
+          { id: 2, text: "Option B", isCorrect: false },
+          { id: 3, text: "Option C", isCorrect: false },
+          { id: 4, text: "Option D", isCorrect: false },
+        ],
+        explanation: "Explain why this is the correct answer",
+      };
+    }
 
-interface ColorMapping {
-  [key: string]: string;
-}
+    setSlides([...slides, newSlide]);
+    setCurrentSlide(slides.length);
+    setShowSlideTypeModal(false);
+  };
 
-interface SlideEditorProps {
-  editingLesson: EditingLesson;
-  setEditingLesson: React.Dispatch<React.SetStateAction<EditingLesson>>;
-  currentSlideIndex: number;
-  setCurrentSlideIndex: React.Dispatch<React.SetStateAction<number>>;
-  setCurrentView: React.Dispatch<React.SetStateAction<ViewType>>;
-  saveLesson: () => void;
-  addSlide: () => void;
-  updateSlide: (slideId: number, updates: Partial<Slide>) => void;
-  deleteSlide: (slideId: number) => void;
-  formatTime: (time: number) => string;
-}
+  const deleteSlide = () => {
+    if (slides.length > 1) {
+      const newSlides = slides.filter(
+        (_: any, index: any) => index !== currentSlide
+      );
+      setSlides(newSlides);
+      setCurrentSlide(Math.max(0, currentSlide - 1));
+    }
+  };
 
-interface LessonDatabaseProps {
-  lessons: Lesson[];
-  setCurrentView: React.Dispatch<React.SetStateAction<ViewType>>;
-  setCurrentLesson: React.Dispatch<React.SetStateAction<Lesson | null>>;
-  editLesson: (lesson: Lesson) => void;
-  deleteLesson: (lessonId: number) => void;
-}
+  const addTextElement = () => {
+    if (slides[currentSlide].type !== "basic") return;
 
-interface LessonPreviewProps {
-  currentLesson: Lesson | null;
-  setCurrentView: React.Dispatch<React.SetStateAction<ViewType>>;
-  isPlaying: boolean;
-  currentTime: number;
-  visibleContent: Slide[];
-  togglePlay: () => void;
-  resetLesson: () => void;
-  formatTime: (time: number) => string;
-  ttsSupported: boolean;
-}
+    const newElement = {
+      id: `text-${Date.now()}`,
+      type: "text",
+      content: "Click to edit text",
+      x: 200,
+      y: 300,
+      width: 300,
+      height: 50,
+      fontSize: 18,
+      fontWeight: "normal",
+      color: "#374151",
+    };
 
-const LessonManagementSystem: React.FC = () => {
-  const [currentView, setCurrentView] = useState<ViewType>("database");
-  const [lessons, setLessons] = useState<Lesson[]>([]);
-  const [currentLesson, setCurrentLesson] = useState<Lesson | null>(null);
-  const [isPlaying, setIsPlaying] = useState<boolean>(false);
-  const [currentTime, setCurrentTime] = useState<number>(0);
-  const [visibleContent, setVisibleContent] = useState<Slide[]>([]);
-  const [ttsSupported, setTtsSupported] = useState<boolean>(false);
-  const [localEditingLesson, setLocalEditingLesson] = useState<EditingLesson>({
-    id: Date.now(),
-    title: "",
-    ttsText: "",
-    totalDuration: 30,
-    slides: [],
-  });
+    const updatedSlides = [...slides];
+    updatedSlides[currentSlide].elements.push(newElement);
+    setSlides(updatedSlides);
+    setSelectedElement(newElement.id);
+  };
 
-  // TTS specific state
-  const [speechSynthesis, setSpeechSynthesis] =
-    useState<SpeechSynthesis | null>(null);
-  const [currentUtterance, setCurrentUtterance] =
-    useState<SpeechSynthesisUtterance | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(0);
+  const addImageElement = () => {
+    if (slides[currentSlide].type !== "basic") return;
+    fileInputRef.current?.click();
+  };
 
-  // Editor state
-  const [editingLesson, setEditingLesson] = useState<EditingLesson>({
-    id: Date.now(),
-    title: "",
-    ttsText: "",
-    totalDuration: 30,
-    slides: [],
-  });
+  const handleImageUpload = (e: any) => {
+    const file: any = e.target.files[0];
+    if (file && file.type.startsWith("image/")) {
+      const reader: any = new FileReader();
+      reader.onload = (event: any) => {
+        const newElement: any = {
+          id: `image-${Date.now()}`,
+          type: "image",
+          src: event.target.result,
+          x: 200,
+          y: 200,
+          width: 300,
+          height: 200,
+        };
+
+        const updatedSlides = [...slides];
+        updatedSlides[currentSlide].elements.push(newElement);
+        setSlides(updatedSlides);
+        setSelectedElement(newElement.id);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addChoice = () => {
+    const updatedSlides = [...slides];
+    const newChoiceId =
+      Math.max(...updatedSlides[currentSlide].choices.map((c: any) => c.id)) +
+      1;
+    updatedSlides[currentSlide].choices.push({
+      id: newChoiceId,
+      text: `Option ${String.fromCharCode(64 + newChoiceId)}`,
+      isCorrect: false,
+    });
+    setSlides(updatedSlides);
+  };
+
+  const removeChoice = (choiceId: any) => {
+    const updatedSlides = [...slides];
+    if (updatedSlides[currentSlide].choices.length > 2) {
+      updatedSlides[currentSlide].choices = updatedSlides[
+        currentSlide
+      ].choices.filter((c: any) => c.id !== choiceId);
+      setSlides(updatedSlides);
+    }
+  };
+
+  const updateQuizSlide = (field: any, value: any) => {
+    const updatedSlides = [...slides];
+    updatedSlides[currentSlide][field] = value;
+    setSlides(updatedSlides);
+  };
+
+  const updateChoice = (choiceId: any, field: any, value: any) => {
+    const updatedSlides = [...slides];
+    const choiceIndex = updatedSlides[currentSlide].choices.findIndex(
+      (c: any) => c.id === choiceId
+    );
+    if (choiceIndex !== -1) {
+      if (field === "isCorrect" && value) {
+        // Only one correct answer allowed
+        updatedSlides[currentSlide].choices.forEach(
+          (c: any) => (c.isCorrect = false)
+        );
+      }
+      updatedSlides[currentSlide].choices[choiceIndex][field] = value;
+      setSlides(updatedSlides);
+    }
+  };
+
+  const deleteElement = () => {
+    if (selectedElement && slides[currentSlide].type === "basic") {
+      const updatedSlides = [...slides];
+      updatedSlides[currentSlide].elements = updatedSlides[
+        currentSlide
+      ].elements.filter((el: any) => el.id !== selectedElement);
+      setSlides(updatedSlides);
+      setSelectedElement(null);
+    }
+  };
+
+  const updateElement = useCallback(
+    (elementId: any, updates: any) => {
+      setSlides((prevSlides: any) => {
+        const updatedSlides = [...prevSlides];
+        const elementIndex = updatedSlides[currentSlide].elements.findIndex(
+          (el: any) => el.id === elementId
+        );
+        if (elementIndex !== -1) {
+          updatedSlides[currentSlide].elements[elementIndex] = {
+            ...updatedSlides[currentSlide].elements[elementIndex],
+            ...updates,
+          };
+        }
+        return updatedSlides;
+      });
+    },
+    [currentSlide]
+  );
+
+  const handleMouseDown = (e: any, elementId: any) => {
+    if (slides[currentSlide].type !== "basic" || isPresentationMode) return;
+
+    e.preventDefault();
+    e.stopPropagation(); // Add this
+    setSelectedElement(elementId);
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const element = slides[currentSlide].elements.find(
+      (el: any) => el.id === elementId
+    );
+
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Check if clicking on resize handle
+    const handles = getResizeHandles(element);
+    const clickedHandle = handles.find(
+      (handle) =>
+        mouseX >= handle.x - 5 &&
+        mouseX <= handle.x + 5 &&
+        mouseY >= handle.y - 5 &&
+        mouseY <= handle.y + 5
+    );
+
+    if (clickedHandle) {
+      setIsResizing(true);
+      setResizeHandle(clickedHandle.type);
+      setDragStart({ x: mouseX, y: mouseY });
+    } else {
+      setIsDragging(true);
+      setDragStart({
+        x: mouseX - element.x,
+        y: mouseY - element.y,
+      });
+    }
+  };
+
+  const handleMouseMove = (e: any) => {
+    if (
+      !selectedElement ||
+      (!isDragging && !isResizing) ||
+      slides[currentSlide].type !== "basic" ||
+      isPresentationMode
+    )
+      return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const element = slides[currentSlide].elements.find(
+      (el: any) => el.id === selectedElement
+    );
+
+    if (isDragging) {
+      updateElement(selectedElement, {
+        x: Math.max(0, mouseX - dragStart.x),
+        y: Math.max(0, mouseY - dragStart.y),
+      });
+    } else if (isResizing) {
+      const deltaX = mouseX - dragStart.x;
+      const deltaY = mouseY - dragStart.y;
+
+      let updates = {};
+
+      switch (resizeHandle) {
+        case "se":
+          updates = {
+            width: Math.max(50, element.width + deltaX),
+            height: Math.max(30, element.height + deltaY),
+          };
+          break;
+        case "sw":
+          updates = {
+            x: element.x + deltaX,
+            width: Math.max(50, element.width - deltaX),
+            height: Math.max(30, element.height + deltaY),
+          };
+          break;
+        case "ne":
+          updates = {
+            y: element.y + deltaY,
+            width: Math.max(50, element.width + deltaX),
+            height: Math.max(30, element.height - deltaY),
+          };
+          break;
+        case "nw":
+          updates = {
+            x: element.x + deltaX,
+            y: element.y + deltaY,
+            width: Math.max(50, element.width - deltaX),
+            height: Math.max(30, element.height - deltaY),
+          };
+          break;
+      }
+
+      updateElement(selectedElement, updates);
+      setDragStart({ x: mouseX, y: mouseY });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setResizeHandle("");
+  };
+
+  const getResizeHandles = (element: any) => {
+    if (!element) return [];
+
+    return [
+      { type: "nw", x: element.x, y: element.y },
+      { type: "ne", x: element.x + element.width, y: element.y },
+      { type: "sw", x: element.x, y: element.y + element.height },
+      {
+        type: "se",
+        x: element.x + element.width,
+        y: element.y + element.height,
+      },
+    ];
+  };
+
+  const handleTextEdit = (elementId: any, newContent: any) => {
+    updateElement(elementId, { content: newContent });
+  };
+
+  const nextSlide = () =>
+    setCurrentSlide((prev: any) => (prev + 1) % slides.length);
+  const prevSlide = () =>
+    setCurrentSlide((prev: any) => (prev - 1 + slides.length) % slides.length);
+
+  const handleQuizAnswer = (slideId: any, choiceId: any) => {
+    setQuizAnswers((prev: any) => ({
+      ...prev,
+      [slideId]: choiceId,
+    }));
+  };
+
+  const togglePresentationMode = () => {
+    setIsPresentationMode(!isPresentationMode);
+    setSelectedElement(null);
+    setQuizAnswers({});
+    setShowQuizResults(false);
+  };
+
+  const exportPresentation = () => {
+    const dataStr = JSON.stringify(slides, null, 2);
+    const dataUri =
+      "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
+
+    const exportFileDefaultName = "presentation.json";
+
+    const linkElement = document.createElement("a");
+    linkElement.setAttribute("href", dataUri);
+    linkElement.setAttribute("download", exportFileDefaultName);
+    linkElement.click();
+  };
+
   useEffect(() => {
-    setLocalEditingLesson(editingLesson);
-  }, [editingLesson]);
-  const [currentSlideIndex, setCurrentSlideIndex] = useState<number>(0);
-  const [isEditing, setIsEditing] = useState<boolean>(false);
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (currentView === "editor" && e.ctrlKey && e.key === "s") {
-        e.preventDefault();
-        // Update the main editing lesson with local changes
-        setEditingLesson(localEditingLesson);
+    const handleKeyDown = (e: any) => {
+      if (isPresentationMode) {
+        if (e.key === "ArrowRight" || e.key === " ") nextSlide();
+        if (e.key === "ArrowLeft") prevSlide();
+        if (e.key === "Escape") togglePresentationMode();
+        return;
+      }
+
+      if (
+        e.key === "Delete" &&
+        selectedElement &&
+        slides[currentSlide].type === "basic"
+      ) {
+        deleteElement();
+      }
+      if (e.key === "Escape") {
+        setSelectedElement(null);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentView, localEditingLesson, setEditingLesson]);
-  const calculateTTSDuration = useCallback(
-    (text: string, wordsPerMinute: number = 150): number => {
-      if (!text || text.trim().length === 0) return 0;
+  }, [selectedElement, currentSlide, isPresentationMode]);
 
-      // Count words (split by whitespace and filter out empty strings)
-      const wordCount = text
-        .trim()
-        .split(/\s+/)
-        .filter((word) => word.length > 0).length;
-
-      // Calculate duration in seconds
-      const durationInSeconds = Math.ceil((wordCount / wordsPerMinute) * 60);
-
-      // Add a small buffer (10% extra time)
-      return Math.ceil(durationInSeconds * 1.1);
-    },
-    []
-  );
-
-  // Color mapping for themes
-  const colorMapping: ColorMapping = {
-    "bg-gray-50": "border-gray-400",
-    "bg-blue-50": "border-blue-400",
-    "bg-green-50": "border-green-400",
-    "bg-yellow-50": "border-yellow-400",
-    "bg-purple-50": "border-purple-400",
-    "bg-pink-50": "border-pink-400",
-  };
-
-  // Initialize TTS and sample lesson
-  useEffect(() => {
-    // Check TTS support
-    if ("speechSynthesis" in window) {
-      setSpeechSynthesis(window.speechSynthesis);
-      setTtsSupported(true);
+  const currentSlideData = slides[currentSlide];
+  const selectedElementData = useMemo(() => {
+    if (
+      !selectedElement ||
+      currentSlideData.type !== "basic" ||
+      !currentSlideData.elements
+    ) {
+      return null;
     }
-
-    const sampleLesson: Lesson = {
-      id: 1,
-      title: "Introduction to Photosynthesis",
-      ttsText:
-        "Photosynthesis is the process by which plants convert sunlight into energy. This fundamental biological process sustains most life on Earth by producing oxygen and glucose. The chemical equation for photosynthesis is six carbon dioxide plus six water plus light energy equals glucose plus six oxygen.",
-      totalDuration: 25,
-      slides: [
-        {
-          id: 1,
-          startTime: 0,
-          title: "What is Photosynthesis?",
-          type: "text",
-          content:
-            "Photosynthesis is the biological process that converts light energy into chemical energy, enabling plants to produce food.",
-          bgColor: "bg-blue-50",
-          borderColor: "border-blue-400",
-        },
-        {
-          id: 2,
-          startTime: 8,
-          title: "Chemical Equation",
-          type: "formula",
-          content: "6CO₂ + 6H₂O + light energy → C₆H₁₂O₆ + 6O₂",
-          bgColor: "bg-green-50",
-          borderColor: "border-green-400",
-        },
-        {
-          id: 3,
-          startTime: 16,
-          title: "Process Visualization",
-          type: "image",
-          content:
-            "https://via.placeholder.com/600x400/4ade80/ffffff?text=Photosynthesis+Diagram",
-          description:
-            "Diagram showing the photosynthesis process in plant cells",
-          bgColor: "bg-purple-50",
-          borderColor: "border-purple-400",
-        },
-      ],
-    };
-    setLessons([sampleLesson]);
-  }, []);
-
-  // Time tracking for TTS
-  useEffect(() => {
-    if (isPlaying && currentLesson) {
-      const updateTime = () => {
-        const elapsed = (Date.now() - startTimeRef.current) / 1000;
-        setCurrentTime(elapsed);
-
-        const visible = currentLesson.slides.filter(
-          (slide) => elapsed >= slide.startTime
-        );
-        setVisibleContent(visible);
-
-        // Stop if we've reached the total duration
-        if (elapsed >= currentLesson.totalDuration) {
-          stopPlayback();
+    return (
+      currentSlideData.elements.find((el: any) => el.id === selectedElement) ||
+      null
+    );
+  }, [selectedElement, currentSlideData.elements]);
+  const renderBasicSlide = () => (
+    <div
+      ref={canvasRef}
+      className={`w-[900px] h-[600px] bg-white rounded-lg shadow-lg relative overflow-hidden ${
+        isPresentationMode ? "cursor-default" : "cursor-crosshair"
+      }`}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onClick={(e) => {
+        // Only clear selection if clicking on the canvas itself, not child elements
+        if (!isPresentationMode && e.target === e.currentTarget) {
+          setSelectedElement(null);
         }
-      };
-
-      intervalRef.current = setInterval(updateTime, 100);
-      return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-        }
-      };
-    }
-  }, [isPlaying, currentLesson]);
-
-  // Cleanup TTS on unmount
-  useEffect(() => {
-    return () => {
-      if (speechSynthesis && currentUtterance) {
-        speechSynthesis.cancel();
-      }
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [speechSynthesis, currentUtterance]);
-
-  // TTS Control Functions
-  const startTTS = useCallback(
-    (text: string): void => {
-      if (!speechSynthesis || !text.trim()) return;
-
-      // Cancel any existing speech
-      speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(text);
-
-      // Configure utterance
-      utterance.rate = 0.9;
-      utterance.pitch = 1;
-      utterance.volume = 1;
-
-      utterance.onend = () => {
-        stopPlayback();
-      };
-
-      utterance.onerror = (event) => {
-        console.error("TTS Error:", event.error);
-        stopPlayback();
-      };
-
-      setCurrentUtterance(utterance);
-      speechSynthesis.speak(utterance);
-    },
-    [speechSynthesis]
-  );
-
-  const stopPlayback = useCallback((): void => {
-    setIsPlaying(false);
-    if (speechSynthesis) {
-      speechSynthesis.cancel();
-    }
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-    setCurrentUtterance(null);
-  }, [speechSynthesis]);
-
-  // Lesson Management Functions
-  const saveLesson = useCallback((): void => {
-    // Calculate suggested duration based on TTS text
-    const suggestedDuration = calculateTTSDuration(editingLesson.ttsText);
-
-    // Update the lesson with calculated duration
-    const lessonToSave = {
-      ...editingLesson,
-      totalDuration:
-        suggestedDuration > 0 ? suggestedDuration : editingLesson.totalDuration,
-    };
-
-    if (isEditing) {
-      setLessons((prev) =>
-        prev.map((lesson) =>
-          lesson.id === editingLesson.id ? (lessonToSave as Lesson) : lesson
-        )
-      );
-    } else {
-      const newLesson: Lesson = { ...lessonToSave, id: Date.now() };
-      setLessons((prev) => [...prev, newLesson]);
-    }
-
-    setIsEditing(false);
-    setEditingLesson({
-      id: Date.now(),
-      title: "",
-      ttsText: "",
-      totalDuration: 30,
-      slides: [],
-    });
-  }, [calculateTTSDuration, editingLesson, isEditing]);
-
-  const editLesson = useCallback((lesson: Lesson): void => {
-    setEditingLesson({ ...lesson });
-    setIsEditing(true);
-    setCurrentView("editor");
-  }, []);
-
-  const deleteLesson = useCallback(
-    (lessonId: number): void => {
-      setLessons((prev) => prev.filter((lesson) => lesson.id !== lessonId));
-      if (currentLesson && currentLesson.id === lessonId) {
-        setCurrentLesson(null);
-      }
-    },
-    [currentLesson]
-  );
-
-  // Slide Management Functions
-  const addSlide = useCallback((): void => {
-    const newSlide: Slide = {
-      id: Date.now(),
-      startTime: editingLesson.slides.length * 5,
-      title: `Slide ${editingLesson.slides.length + 1}`,
-      type: "text",
-      content: "",
-      bgColor: "bg-gray-50",
-      borderColor: "border-gray-400",
-    };
-    setEditingLesson((prev) => ({
-      ...prev,
-      slides: [...prev.slides, newSlide],
-    }));
-    setCurrentSlideIndex(editingLesson.slides.length);
-  }, [editingLesson.slides.length]);
-
-  const updateSlide = useCallback(
-    (slideId: number, updates: Partial<Slide>): void => {
-      setEditingLesson((prev) => ({
-        ...prev,
-        slides: prev.slides.map((slide) =>
-          slide.id === slideId ? { ...slide, ...updates } : slide
-        ),
-      }));
-    },
-    []
-  );
-
-  const deleteSlide = useCallback(
-    (slideId: number): void => {
-      setEditingLesson((prev) => ({
-        ...prev,
-        slides: prev.slides.filter((slide) => slide.id !== slideId),
-      }));
-      if (currentSlideIndex >= editingLesson.slides.length - 1) {
-        setCurrentSlideIndex(Math.max(0, editingLesson.slides.length - 2));
-      }
-    },
-    [currentSlideIndex, editingLesson.slides.length]
-  );
-
-  // Audio Controls
-  const togglePlay = useCallback((): void => {
-    if (!currentLesson) return;
-
-    if (isPlaying) {
-      stopPlayback();
-    } else {
-      setIsPlaying(true);
-      startTimeRef.current = Date.now() - currentTime * 1000;
-
-      if (ttsSupported && currentLesson.ttsText) {
-        startTTS(currentLesson.ttsText);
-      }
-    }
-  }, [
-    currentLesson,
-    isPlaying,
-    currentTime,
-    ttsSupported,
-    startTTS,
-    stopPlayback,
-  ]);
-
-  const resetLesson = useCallback((): void => {
-    stopPlayback();
-    setCurrentTime(0);
-    setVisibleContent([]);
-    startTimeRef.current = 0;
-  }, [stopPlayback]);
-
-  const formatTime = useCallback((time: number): string => {
-    const minutes: number = Math.floor(time / 60);
-    const seconds: number = Math.floor(time % 60);
-    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
-  }, []);
-
-  // Auto-update duration when TTS text changes
-  useEffect(() => {
-    if (editingLesson.ttsText) {
-      const suggestedDuration = calculateTTSDuration(editingLesson.ttsText);
-      // Only auto-update if current duration is the default (30s) or very different
-      if (
-        editingLesson.totalDuration === 30 ||
-        Math.abs(editingLesson.totalDuration - suggestedDuration) >
-          suggestedDuration * 0.5
-      ) {
-        setEditingLesson((prev) => ({
-          ...prev,
-          totalDuration: suggestedDuration,
-        }));
-      }
-    }
-  }, [
-    editingLesson.ttsText,
-    editingLesson.totalDuration,
-    calculateTTSDuration,
-  ]);
-
-  // Component Renders
-  const LessonDatabase: React.FC<LessonDatabaseProps> = ({
-    lessons,
-    setCurrentView,
-    setCurrentLesson,
-    editLesson,
-    deleteLesson,
-  }) => (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">List Course</h2>
-        <button
-          onClick={() => setCurrentView("editor")}
-          className="flex items-center space-x-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
-        >
-          <Plus size={20} />
-          <span>New Course</span>
-        </button>
-      </div>
-
-      {!ttsSupported && (
-        <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-6">
-          <strong>Note:</strong> Text-to-speech is not supported in your
-          browser. Audio functionality will be limited.
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {lessons.map((lesson: Lesson) => (
-          <div
-            key={lesson.id}
-            className="bg-white rounded-lg shadow-md p-6 border"
-          >
-            <h3 className="text-lg font-semibold mb-2">{lesson.title}</h3>
-            <p className="text-gray-600 text-sm mb-4 line-clamp-3">
-              {lesson.ttsText.substring(0, 100)}...
-            </p>
-            <div className="flex justify-between items-center text-sm text-gray-500 mb-4">
-              <span>{lesson.slides.length} slides</span>
-              <span>{lesson.totalDuration}s</span>
-            </div>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => {
-                  setCurrentLesson(lesson);
-                  setCurrentView("preview");
+      }}
+    >
+      {currentSlideData.elements?.map((element: any) => (
+        <div key={element.id}>
+          {element.type === "text" ? (
+            <div
+              className={`absolute select-none ${
+                isPresentationMode ? "cursor-default" : "cursor-move"
+              } ${
+                selectedElement === element.id && !isPresentationMode
+                  ? "ring-2 ring-blue-500"
+                  : ""
+              }`}
+              style={{
+                left: element.x,
+                top: element.y,
+                width: element.width,
+                height: element.height,
+                fontSize: element.fontSize,
+                fontWeight: element.fontWeight,
+                color: element.color,
+                padding: "8px",
+              }}
+              onMouseDown={(e) =>
+                !isPresentationMode && handleMouseDown(e, element.id)
+              }
+            >
+              <div
+                contentEditable={!isPresentationMode}
+                suppressContentEditableWarning={true}
+                onBlur={(e) => {
+                  if (!isPresentationMode) {
+                    handleTextEdit(element.id, e.target.textContent);
+                  }
                 }}
-                className="flex-1 flex items-center justify-center space-x-1 bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded text-sm"
+                className={`outline-none w-full h-full ${
+                  isPresentationMode ? "pointer-events-none" : ""
+                }`}
               >
-                <Eye size={16} />
-                <span>Preview</span>
-              </button>
-              <button
-                onClick={() => editLesson(lesson)}
-                className="flex-1 flex items-center justify-center space-x-1 bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-2 rounded text-sm"
-              >
-                <Edit3 size={16} />
-                <span>Edit</span>
-              </button>
-              <button
-                onClick={() => deleteLesson(lesson.id)}
-                className="flex items-center justify-center bg-red-500 hover:bg-red-600 text-white px-3 py-2 rounded text-sm"
-              >
-                <Trash2 size={16} />
-              </button>
+                {element.content}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ) : (
+            <img
+              src={element.src}
+              alt="Slide element"
+              className={`absolute select-none object-cover pointer-events-auto ${
+                isPresentationMode ? "cursor-default" : "cursor-move"
+              } ${
+                selectedElement === element.id && !isPresentationMode
+                  ? "ring-2 ring-blue-500"
+                  : ""
+              }`}
+              style={{
+                left: element.x,
+                top: element.y,
+                width: element.width,
+                height: element.height,
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation(); // Prevent canvas click
+                !isPresentationMode && handleMouseDown(e, element.id);
+              }}
+              draggable={false}
+            />
+          )}
+
+          {selectedElement === element.id && !isPresentationMode && (
+            <>
+              {getResizeHandles(element).map((handle) => (
+                <div
+                  key={handle.type}
+                  className="absolute w-2 h-2 bg-blue-500 border border-white cursor-nw-resize z-10"
+                  style={{
+                    left: handle.x - 4,
+                    top: handle.y - 4,
+                    cursor: `${handle.type}-resize`,
+                    pointerEvents: "auto", // Ensure handles are clickable
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsResizing(true);
+                    setResizeHandle(handle.type);
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    setDragStart({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    });
+                  }}
+                />
+              ))}
+            </>
+          )}
+        </div>
+      ))}
     </div>
   );
-  const SlideEditor: React.FC<SlideEditorProps> = ({
-    editingLesson,
-    setEditingLesson,
-    currentSlideIndex,
-    setCurrentSlideIndex,
-    setCurrentView,
-    saveLesson,
-    formatTime,
-  }) => {
-    // Local state that only updates when explicitly saved
-    const [localEditingLesson, setLocalEditingLesson] =
-      useState<EditingLesson>(editingLesson);
 
-    // Update local state when editing lesson changes (from outside)
-    useEffect(() => {
-      setLocalEditingLesson(editingLesson);
-    }, [editingLesson]);
-
-    // Stable reference to current slide from local state
-    const currentSlide: Slide | undefined =
-      localEditingLesson.slides[currentSlideIndex];
-
-    // Local update handlers that modify local state only
-    const handleLessonUpdate = useCallback(
-      (field: keyof EditingLesson, value: string | number): void => {
-        setLocalEditingLesson((prev: EditingLesson) => ({
-          ...prev,
-          [field]: value,
-        }));
-      },
-      []
-    );
-
-    const handleLocalSlideUpdate = useCallback(
-      (slideId: number, updates: Partial<Slide>): void => {
-        setLocalEditingLesson((prev: EditingLesson) => ({
-          ...prev,
-          slides: prev.slides.map((slide) =>
-            slide.id === slideId ? { ...slide, ...updates } : slide
-          ),
-        }));
-      },
-      []
-    );
-
-    const handleSlideTypeChange = useCallback(
-      (slideId: number, newType: SlideType): void => {
-        handleLocalSlideUpdate(slideId, {
-          type: newType,
-          content:
-            newType === "image"
-              ? "https://via.placeholder.com/600x400/4ade80/ffffff?text=Image+Placeholder"
-              : "",
-        });
-      },
-      [handleLocalSlideUpdate]
-    );
-
-    const handleColorChange = useCallback(
-      (slideId: number, bgColor: ColorTheme): void => {
-        const borderColor = colorMapping[bgColor] || "border-gray-400";
-        handleLocalSlideUpdate(slideId, { bgColor, borderColor });
-      },
-      [handleLocalSlideUpdate]
-    );
-
-    const handleLocalAddSlide = useCallback((): void => {
-      const newSlide: Slide = {
-        id: Date.now(),
-        startTime: localEditingLesson.slides.length * 5,
-        title: `Slide ${localEditingLesson.slides.length + 1}`,
-        type: "text",
-        content: "",
-        bgColor: "bg-gray-50",
-        borderColor: "border-gray-400",
-      };
-      setLocalEditingLesson((prev: EditingLesson) => ({
-        ...prev,
-        slides: [...prev.slides, newSlide],
-      }));
-      setCurrentSlideIndex(localEditingLesson.slides.length);
-    }, [localEditingLesson.slides.length, setCurrentSlideIndex]);
-
-    const handleLocalDeleteSlide = useCallback(
-      (slideId: number): void => {
-        setLocalEditingLesson((prev: EditingLesson) => ({
-          ...prev,
-          slides: prev.slides.filter((slide) => slide.id !== slideId),
-        }));
-        if (currentSlideIndex >= localEditingLesson.slides.length - 1) {
-          setCurrentSlideIndex(
-            Math.max(0, localEditingLesson.slides.length - 2)
-          );
-        }
-      },
-      [
-        currentSlideIndex,
-        localEditingLesson.slides.length,
-        setCurrentSlideIndex,
-      ]
-    );
-
-    // Apply changes to parent state (only when explicitly called)
-    const applyChanges = useCallback((): void => {
-      setEditingLesson(localEditingLesson);
-    }, [localEditingLesson, setEditingLesson]);
-
-    // Keyboard shortcut handler
-    useEffect(() => {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.ctrlKey && e.key === "s") {
-          e.preventDefault();
-          applyChanges();
-        }
-      };
-
-      window.addEventListener("keydown", handleKeyDown);
-      return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [applyChanges]);
-
-    // Check if there are unsaved changes
-    const hasUnsavedChanges = useMemo(() => {
-      return (
-        JSON.stringify(editingLesson) !== JSON.stringify(localEditingLesson)
+  const renderQuizSlide = () => {
+    if (isPresentationMode) {
+      const userAnswer = quizAnswers[currentSlideData.id];
+      const isAnswered = userAnswer !== undefined;
+      const correctChoice = currentSlideData.choices.find(
+        (c: any) => c.isCorrect
       );
-    }, [editingLesson, localEditingLesson]);
+      const isCorrect = isAnswered && userAnswer === correctChoice.id;
 
-    return (
-      <div className="flex h-screen">
-        {/* Slide Navigation */}
-        <div className="w-64 bg-gray-100 border-r overflow-y-auto">
-          <div className="p-4 border-b">
-            <button
-              onClick={handleLocalAddSlide}
-              className="w-full flex items-center justify-center space-x-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
+      return (
+        <div className="w-[900px] h-[600px] bg-white rounded-lg shadow-lg p-8 overflow-y-auto">
+          <div className="mb-8">
+            <div className="flex items-center mb-4">
+              <HelpCircle className="text-blue-500 mr-2" size={32} />
+              <h2 className="text-3xl font-bold text-gray-800">
+                Quiz Question
+              </h2>
+            </div>
+            <div className="text-2xl text-gray-700 mb-8 p-4 bg-gray-50 rounded-lg">
+              {currentSlideData.question}
+            </div>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            {currentSlideData.choices.map((choice: any, index: any) => (
+              <button
+                key={choice.id}
+                onClick={() =>
+                  !isAnswered &&
+                  handleQuizAnswer(currentSlideData.id, choice.id)
+                }
+                disabled={isAnswered}
+                className={`w-full p-4 text-left rounded-lg border-2 transition-all text-lg ${
+                  isAnswered
+                    ? choice.isCorrect
+                      ? "bg-green-100 border-green-500 text-green-800"
+                      : userAnswer === choice.id
+                      ? "bg-red-100 border-red-500 text-red-800"
+                      : "bg-gray-100 border-gray-300 text-gray-600"
+                    : userAnswer === choice.id
+                    ? "bg-blue-100 border-blue-500"
+                    : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                      isAnswered
+                        ? choice.isCorrect
+                          ? "bg-green-500 text-white"
+                          : userAnswer === choice.id
+                          ? "bg-red-500 text-white"
+                          : "bg-gray-300 text-gray-600"
+                        : userAnswer === choice.id
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-200 text-gray-700"
+                    }`}
+                  >
+                    {String.fromCharCode(65 + index)}
+                  </div>
+                  <span>{choice.text}</span>
+                  {isAnswered && choice.isCorrect && (
+                    <Check className="ml-auto text-green-500" size={20} />
+                  )}
+                  {isAnswered &&
+                    userAnswer === choice.id &&
+                    !choice.isCorrect && (
+                      <X className="ml-auto text-red-500" size={20} />
+                    )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {isAnswered && currentSlideData.explanation && (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h3 className="font-semibold text-blue-800 mb-2">Explanation:</h3>
+              <p className="text-blue-700">{currentSlideData.explanation}</p>
+            </div>
+          )}
+
+          {isAnswered && (
+            <div
+              className={`mt-4 p-4 rounded-lg text-center ${
+                isCorrect
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }`}
             >
-              <Plus size={20} />
-              <span>Add Slide</span>
+              <div className="text-xl font-bold">
+                {isCorrect ? "✓ Correct!" : "✗ Incorrect"}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Edit mode for quiz slides
+    return (
+      <div className="w-[900px] h-[600px] bg-white rounded-lg shadow-lg p-8 overflow-y-auto">
+        {/* Question */}
+        <div className="mb-8">
+          <div className="flex items-center mb-4">
+            <HelpCircle className="text-blue-500 mr-2" size={24} />
+            <h2 className="text-2xl font-bold text-gray-800">Question</h2>
+          </div>
+          <textarea
+            value={currentSlideData.question}
+            onChange={(e: any) => updateQuizSlide("question", e.target.value)}
+            className="w-full p-4 text-xl border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none resize-none"
+            rows={3}
+            placeholder="Enter your question here..."
+          />
+        </div>
+
+        {/* Choices */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-700">
+              Answer Choices
+            </h3>
+            <button
+              onClick={addChoice}
+              className="flex items-center space-x-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+            >
+              <Plus size={14} />
+              <span>Add Choice</span>
             </button>
           </div>
 
-          <div className="p-2">
-            {localEditingLesson.slides.map((slide: Slide, index: number) => (
+          <div className="space-y-3">
+            {currentSlideData.choices.map((choice: any, index: any) => (
+              <div
+                key={choice.id}
+                className="flex items-center space-x-3 p-3 border rounded-lg"
+              >
+                <div className="flex items-center space-x-2">
+                  <span className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-sm font-semibold">
+                    {String.fromCharCode(65 + index)}
+                  </span>
+                  <input
+                    type="radio"
+                    name="correct-answer"
+                    checked={choice.isCorrect}
+                    onChange={(e) =>
+                      updateChoice(choice.id, "isCorrect", e.target.checked)
+                    }
+                    className="text-green-500"
+                  />
+                  <label className="text-sm text-gray-600">Correct</label>
+                </div>
+
+                <input
+                  type="text"
+                  value={choice.text}
+                  onChange={(e) =>
+                    updateChoice(choice.id, "text", e.target.value)
+                  }
+                  className="flex-1 p-2 border border-gray-200 rounded focus:border-blue-500 outline-none"
+                  placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                />
+
+                {currentSlideData.choices.length > 2 && (
+                  <button
+                    onClick={() => removeChoice(choice.id)}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Explanation */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-3">
+            Explanation (Optional)
+          </h3>
+          <textarea
+            value={currentSlideData.explanation}
+            onChange={(e) => updateQuizSlide("explanation", e.target.value)}
+            className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none resize-none"
+            rows={3}
+            placeholder="Explain why this answer is correct..."
+          />
+        </div>
+      </div>
+    );
+  };
+
+  if (isPresentationMode) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col">
+        {/* Presentation Header */}
+        <div className="bg-gray-900 px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-lg font-bold">Presentation Mode</h1>
+            <span className="text-sm text-gray-400">
+              Slide {currentSlide + 1} of {slides.length}
+            </span>
+          </div>
+          <button
+            onClick={togglePresentationMode}
+            className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+          >
+            <X size={16} />
+            <span>Exit</span>
+          </button>
+        </div>
+
+        {/* Slide Content */}
+        <div className="flex-1 flex items-center justify-center p-8">
+          {currentSlideData.type === "basic"
+            ? renderBasicSlide()
+            : renderQuizSlide()}
+        </div>
+
+        {/* Navigation */}
+        <div className="bg-gray-900 p-4 flex items-center justify-center space-x-4">
+          <button
+            onClick={prevSlide}
+            disabled={currentSlide === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={20} />
+            <span>Previous</span>
+          </button>
+
+          <div className="flex space-x-2">
+            {slides.map((_: any, index: any) => (
+              <button
+                key={index}
+                onClick={() => setCurrentSlide(index)}
+                className={`w-3 h-3 rounded-full ${
+                  currentSlide === index ? "bg-white" : "bg-gray-600"
+                }`}
+              />
+            ))}
+          </div>
+
+          <button
+            onClick={nextSlide}
+            disabled={currentSlide === slides.length - 1}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span>Next</span>
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        <div className="bg-gray-900 px-6 py-2 text-xs text-gray-400 text-center">
+          Use arrow keys or space to navigate • ESC to exit presentation mode
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b px-6 py-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-800">Canvas PowerPoint</h1>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600">
+              Slide {currentSlide + 1} of {slides.length}
+            </span>
+
+            <button
+              onClick={togglePresentationMode}
+              className="flex items-center space-x-1 px-3 py-1 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors"
+            >
+              <Play size={16} />
+              <span>Present</span>
+            </button>
+
+            <button
+              onClick={exportPresentation}
+              className="flex items-center space-x-1 px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            >
+              <Download size={16} />
+              <span>Export</span>
+            </button>
+
+            {/* Basic Slide Tools */}
+            {currentSlideData.type === "basic" && (
+              <>
+                <button
+                  onClick={addTextElement}
+                  className="flex items-center space-x-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                >
+                  <Type size={16} />
+                  <span>Text</span>
+                </button>
+                <button
+                  onClick={addImageElement}
+                  className="flex items-center space-x-1 px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors"
+                >
+                  <Image size={16} />
+                  <span>Image</span>
+                </button>
+              </>
+            )}
+
+            <button
+              onClick={() => setShowSlideTypeModal(true)}
+              className="flex items-center space-x-1 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              <Plus size={16} />
+              <span>Add Slide</span>
+            </button>
+
+            {slides.length > 1 && (
+              <button
+                onClick={deleteSlide}
+                // Continue from your delete button:
+                className="flex items-center space-x-1 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+              >
+                <Trash2 size={16} />
+                <span>Delete</span>
+              </button>
+            )}
+
+            {selectedElement && currentSlideData.type === "basic" && (
+              <button
+                onClick={deleteElement}
+                className="flex items-center space-x-1 px-3 py-1 bg-red-400 text-white rounded hover:bg-red-500 transition-colors"
+              >
+                <Trash2 size={16} />
+                <span>Delete Element</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex">
+        {/* Slide Thumbnails */}
+        <div className="w-64 bg-white border-r p-4 overflow-y-auto">
+          <h3 className="text-sm font-semibold text-gray-600 mb-3">
+            Slides {showQuizResults}
+          </h3>
+          <div className="space-y-2">
+            {slides.map((slide: any, index: any) => (
               <div
                 key={slide.id}
-                onClick={() => setCurrentSlideIndex(index)}
-                className={`p-3 mb-2 rounded cursor-pointer border-2 ${
-                  index === currentSlideIndex
+                onClick={() => setCurrentSlide(index)}
+                className={`w-full h-32 border-2 rounded-lg cursor-pointer transition-all ${
+                  currentSlide === index
                     ? "border-blue-500 bg-blue-50"
-                    : "border-gray-300 bg-white hover:bg-gray-50"
+                    : "border-gray-200 hover:border-gray-300"
                 }`}
               >
-                <div className="font-medium text-sm">{slide.title}</div>
-                <div className="text-xs text-gray-500 mt-1">
-                  {formatTime(slide.startTime)} - {slide.type}
+                <div className="p-2 h-full flex flex-col justify-between">
+                  <div className="flex items-center space-x-2">
+                    {slide.type === "quiz" ? (
+                      <HelpCircle size={16} className="text-blue-500" />
+                    ) : (
+                      <Layout size={16} className="text-gray-500" />
+                    )}
+                    <span className="text-xs text-gray-600">
+                      {slide.type === "quiz" ? "Quiz" : "Basic"}
+                    </span>
+                  </div>
+                  <div className="text-xs text-gray-500 text-center">
+                    Slide {index + 1}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Main Editor */}
-        <div className="flex-1 flex flex-col">
-          {/* Toolbar */}
-          <div className="bg-white border-b p-4 flex justify-between items-center">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setCurrentView("database")}
-                className="flex items-center space-x-2 text-gray-600 hover:text-gray-800"
-              >
-                <ArrowLeft size={20} />
-                <span>Back to Database</span>
-              </button>
-              <span className="text-gray-400">|</span>
-              <span className="font-medium">
-                {localEditingLesson.title || "Untitled Lesson"}
-                {hasUnsavedChanges && (
-                  <span className="text-orange-500 ml-1">*</span>
-                )}
-              </span>
-            </div>
-            <div className="flex items-center space-x-2">
-              {hasUnsavedChanges && (
-                <div className="flex items-center space-x-2 text-sm text-orange-600 bg-orange-50 px-3 py-1 rounded-lg">
-                  <span>Unsaved changes</span>
-                  <kbd className="px-2 py-1 bg-white border rounded text-xs">
-                    Ctrl+S
-                  </kbd>
-                </div>
-              )}
-              <button
-                onClick={applyChanges}
-                disabled={!hasUnsavedChanges}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
-                  hasUnsavedChanges
-                    ? "bg-orange-500 hover:bg-orange-600 text-white"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
-              >
-                <Save size={20} />
-                <span>Apply Changes</span>
-              </button>
-              <button
-                onClick={() => {
-                  setCurrentLesson({ ...localEditingLesson } as Lesson);
-                  setCurrentView("preview");
-                }}
-                className="flex items-center space-x-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg"
-              >
-                <Eye size={20} />
-                <span>Preview</span>
-              </button>
-              <button
-                onClick={saveLesson}
-                className="flex items-center space-x-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg"
-              >
-                <Save size={20} />
-                <span>Save Lesson</span>
-              </button>
-            </div>
-          </div>
+        {/* Canvas Area */}
+        <div className="flex-1 flex items-center justify-center p-8">
+          {currentSlideData.type === "basic"
+            ? renderBasicSlide()
+            : renderQuizSlide()}
+        </div>
 
-          {/* Editor Content */}
-          <div className="flex-1 flex">
-            {/* Slide Preview */}
-            <div className="w-1/2 p-6 bg-gray-50">
-              <h3 className="text-lg font-semibold mb-4">Slide Preview</h3>
-              {currentSlide ? (
-                <div
-                  className={`${currentSlide.bgColor} border-l-4 ${currentSlide.borderColor} p-6 rounded-lg`}
+        {/* Properties Panel - Always visible */}
+        <div className="w-80 bg-white border-l p-4">
+          <h3 className="text-lg font-semibold mb-4">Properties</h3>
+
+          {selectedElementData && currentSlideData.type === "basic" ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Font Size
+                </label>
+                <input
+                  type="number"
+                  value={selectedElementData.fontSize || 18}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      fontSize: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  min="8"
+                  max="72"
+                />
+              </div>
+
+              {/* Rest of your existing properties controls */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Font Weight
+                </label>
+                <select
+                  value={selectedElementData.fontWeight || "normal"}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      fontWeight: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 >
-                  <h4 className="text-xl font-semibold mb-3">
-                    {currentSlide.title}
-                  </h4>
-                  {currentSlide.type === "image" ? (
-                    <div>
-                      <img
-                        src={currentSlide.content}
-                        alt={currentSlide.description || "Slide image"}
-                        className="max-w-full h-auto rounded-lg mb-2"
-                        onError={(
-                          e: React.SyntheticEvent<HTMLImageElement>
-                        ) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src =
-                            'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200"><rect width="400" height="200" fill="%23f3f4f6"/><text x="200" y="100" text-anchor="middle" font-family="Arial" font-size="16" fill="%236b7280">Image Preview</text></svg>';
-                        }}
-                      />
-                      <p className="text-sm text-gray-600">
-                        {currentSlide.description}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-gray-700">{currentSlide.content}</p>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center text-gray-500 py-20">
-                  <Plus size={48} className="mx-auto mb-4 opacity-50" />
-                  <p>Add a slide to get started</p>
-                </div>
-              )}
-            </div>
+                  <option value="normal">Normal</option>
+                  <option value="bold">Bold</option>
+                </select>
+              </div>
 
-            {/* Properties Panel */}
-            <div className="w-1/2 p-6 bg-white overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold">Properties</h3>
-                <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
-                  Press Ctrl+S to apply changes
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color
+                </label>
+                <input
+                  type="color"
+                  value={selectedElementData.color || "#000000"}
+                  onChange={(e) =>
+                    updateElement(selectedElement, { color: e.target.value })
+                  }
+                  className="w-full h-10 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    X Position
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.x || 0}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        x: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Y Position
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.y || 0}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        y: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
                 </div>
               </div>
 
-              {/* Lesson Properties */}
-              <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                <h4 className="font-medium mb-3">Lesson Settings</h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Title
-                    </label>
-                    <input
-                      type="text"
-                      value={localEditingLesson.title}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                        handleLessonUpdate("title", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border rounded-lg"
-                      placeholder="Lesson title"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      TTS Text
-                    </label>
-                    <textarea
-                      value={localEditingLesson.ttsText}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                        handleLessonUpdate("ttsText", e.target.value)
-                      }
-                      className="w-full px-3 py-2 border rounded-lg h-24"
-                      placeholder="Enter the text that will be spoken..."
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      Duration (seconds)
-                    </label>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="number"
-                        value={localEditingLesson.totalDuration}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          handleLessonUpdate(
-                            "totalDuration",
-                            parseInt(e.target.value) || 0
-                          )
-                        }
-                        className="flex-1 px-3 py-2 border rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const suggested = calculateTTSDuration(
-                            localEditingLesson.ttsText
-                          );
-                          if (suggested > 0) {
-                            handleLessonUpdate("totalDuration", suggested);
-                          }
-                        }}
-                        className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm"
-                        title="Calculate suggested duration based on TTS text"
-                      >
-                        Auto
-                      </button>
-                    </div>
-                    {localEditingLesson.ttsText && (
-                      <div className="mt-1 text-xs text-gray-600">
-                        Suggested:{" "}
-                        {calculateTTSDuration(localEditingLesson.ttsText)}s (
-                        {Math.ceil(
-                          localEditingLesson.ttsText.trim().split(/\s+/).length
-                        )}{" "}
-                        words)
-                      </div>
-                    )}
-                  </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Width
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.width || 100}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        width: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Height
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.height || 50}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        height: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
                 </div>
               </div>
-
-              {/* Slide Properties */}
-              {currentSlide && (
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="font-medium">Slide Properties</h4>
-                    <button
-                      onClick={() => handleLocalDeleteSlide(currentSlide.id)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Title
-                      </label>
-                      <input
-                        type="text"
-                        value={currentSlide.title}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          handleLocalSlideUpdate(currentSlide.id, {
-                            title: e.target.value,
-                          })
-                        }
-                        className="w-full px-3 py-2 border rounded-lg"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Start Time (seconds)
-                      </label>
-                      <input
-                        type="number"
-                        value={currentSlide.startTime}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          handleLocalSlideUpdate(currentSlide.id, {
-                            startTime: parseFloat(e.target.value) || 0,
-                          })
-                        }
-                        className="w-full px-3 py-2 border rounded-lg"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Type
-                      </label>
-                      <select
-                        value={currentSlide.type}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                          handleSlideTypeChange(
-                            currentSlide.id,
-                            e.target.value as SlideType
-                          )
-                        }
-                        className="w-full px-3 py-2 border rounded-lg"
-                      >
-                        <option value="text">Text</option>
-                        <option value="image">Image</option>
-                        <option value="formula">Formula</option>
-                      </select>
-                    </div>
-
-                    {currentSlide.type === "image" ? (
-                      <>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Image URL
-                          </label>
-                          <input
-                            type="url"
-                            value={currentSlide.content}
-                            onChange={(
-                              e: React.ChangeEvent<HTMLInputElement>
-                            ) =>
-                              handleLocalSlideUpdate(currentSlide.id, {
-                                content: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border rounded-lg"
-                            placeholder="https://example.com/image.jpg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">
-                            Description
-                          </label>
-                          <input
-                            type="text"
-                            value={currentSlide.description || ""}
-                            onChange={(
-                              e: React.ChangeEvent<HTMLInputElement>
-                            ) =>
-                              handleLocalSlideUpdate(currentSlide.id, {
-                                description: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border rounded-lg"
-                            placeholder="Image description"
-                          />
-                        </div>
-                      </>
-                    ) : (
-                      <div>
-                        <label className="block text-sm font-medium mb-1">
-                          Content
-                        </label>
-                        <textarea
-                          value={currentSlide.content}
-                          onChange={(
-                            e: React.ChangeEvent<HTMLTextAreaElement>
-                          ) =>
-                            handleLocalSlideUpdate(currentSlide.id, {
-                              content: e.target.value,
-                            })
-                          }
-                          className="w-full px-3 py-2 border rounded-lg h-24"
-                          placeholder="Enter slide content..."
-                        />
-                      </div>
-                    )}
-
-                    <div>
-                      <label className="block text-sm font-medium mb-1">
-                        Background Color
-                      </label>
-                      <select
-                        value={currentSlide.bgColor}
-                        onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
-                          handleColorChange(
-                            currentSlide.id,
-                            e.target.value as ColorTheme
-                          )
-                        }
-                        className="w-full px-3 py-2 border rounded-lg"
-                      >
-                        <option value="bg-gray-50">Gray</option>
-                        <option value="bg-blue-50">Blue</option>
-                        <option value="bg-green-50">Green</option>
-                        <option value="bg-yellow-50">Yellow</option>
-                        <option value="bg-purple-50">Purple</option>
-                        <option value="bg-pink-50">Pink</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
+          ) : (
+            <div className="text-center text-gray-500 mt-8">
+              <div className="mb-4">
+                <Type size={48} className="mx-auto text-gray-300" />
+              </div>
+              <p className="text-sm">
+                {currentSlideData.type === "quiz"
+                  ? "Quiz slides don't have editable elements"
+                  : "Select an element to edit its properties"}
+              </p>
+            </div>
+          )}
         </div>
       </div>
-    );
-  };
-  const LessonPreview: React.FC<LessonPreviewProps> = ({
-    currentLesson,
-    setCurrentView,
-    isPlaying,
-    currentTime,
-    visibleContent,
-    togglePlay,
-    resetLesson,
-    formatTime,
-    ttsSupported,
-  }) => {
-    // Prevent rendering if no lesson is selected
-    if (!currentLesson) {
-      return (
-        <div className="min-h-screen bg-black flex items-center justify-center">
-          <div className="text-center text-white">
-            <h2 className="text-2xl font-semibold mb-4">No Lesson Selected</h2>
-            <button
-              onClick={() => setCurrentView("database")}
-              className="flex items-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg mx-auto"
-            >
-              <ArrowLeft size={20} />
-              <span>Back to Database</span>
-            </button>
-          </div>
-        </div>
-      );
-    }
 
-    return (
-      <div className="min-h-screen bg-black text-white flex flex-col">
-        {/* Top Bar */}
-        <div className="flex items-center justify-between p-4 bg-black/80 backdrop-blur-sm">
+      {/* Navigation */}
+      <div className="bg-white border-t px-6 py-3">
+        <div className="flex items-center justify-center space-x-4">
           <button
-            onClick={() => {
-              resetLesson();
-              setCurrentView("database");
-            }}
-            className="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
+            onClick={prevSlide}
+            disabled={currentSlide === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <ArrowLeft size={20} />
-            <span>Back</span>
+            <ChevronLeft size={20} />
+            <span>Previous</span>
           </button>
 
-          <h1 className="text-xl font-semibold text-center flex-1">
-            {currentLesson.title}
-          </h1>
+          <span className="text-sm text-gray-600">
+            {currentSlide + 1} / {slides.length}
+          </span>
 
-          <div className="text-sm text-gray-400">
-            {currentLesson.slides.length} slides
-          </div>
-        </div>
-
-        {/* TTS Warning */}
-        {!ttsSupported && (
-          <div className="mx-4 mt-2 bg-yellow-900/50 border border-yellow-600 text-yellow-200 px-4 py-2 rounded text-sm">
-            Text-to-speech not supported. Audio functionality limited.
-          </div>
-        )}
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex items-center justify-center p-8 overflow-y-auto">
-          <div className="max-w-4xl w-full">
-            {!isPlaying && currentTime === 0 && (
-              <div className="text-center py-16">
-                <div className="text-8xl mb-6">🎧</div>
-                <h2 className="text-3xl font-semibold mb-4">Ready to Start?</h2>
-                <p className="text-gray-300 text-lg mb-6 max-w-md mx-auto">
-                  Click play to begin the lesson. Content will appear as the
-                  audio progresses.
-                </p>
-                <div className="text-gray-400">
-                  {currentLesson.slides.length} slides •{" "}
-                  {formatTime(currentLesson.totalDuration)}
-                </div>
-              </div>
-            )}
-
-            {visibleContent.length > 0 && (
-              <div className="space-y-8">
-                {visibleContent.map((slide) => {
-                  const isActive = currentTime >= slide.startTime;
-
-                  return (
-                    <div
-                      key={`${slide.id}-${slide.startTime}`}
-                      className={`transition-all duration-500 ease-out ${
-                        isActive
-                          ? "opacity-100 transform translate-y-0 scale-100"
-                          : "opacity-30 transform translate-y-2 scale-98"
-                      }`}
-                    >
-                      <div className="bg-gray-900/80 backdrop-blur-sm rounded-xl p-8 border border-gray-800">
-                        <div className="flex justify-between items-start mb-6">
-                          <h3 className="text-2xl font-semibold text-white">
-                            {slide.title}
-                          </h3>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs text-gray-400 bg-gray-800 px-3 py-1 rounded-full">
-                              {formatTime(slide.startTime)}
-                            </span>
-                            {isActive && (
-                              <span className="text-xs text-green-400 bg-green-900/50 px-3 py-1 rounded-full border border-green-700">
-                                Playing
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {slide.type === "image" ? (
-                          <div className="text-center">
-                            <div className="relative min-h-[300px] flex items-center justify-center">
-                              <img
-                                src={slide.content}
-                                alt={slide.description || slide.title}
-                                className="max-w-full h-auto rounded-lg shadow-2xl mx-auto opacity-0 transition-opacity duration-300"
-                                style={{ maxHeight: "60vh" }}
-                                onLoad={(
-                                  e: React.SyntheticEvent<HTMLImageElement>
-                                ) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.opacity = "1";
-                                }}
-                                onError={(
-                                  e: React.SyntheticEvent<HTMLImageElement>
-                                ) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.src =
-                                    'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="600" height="300"><rect width="600" height="300" fill="%23374151" stroke="%236b7280"/><text x="300" y="150" text-anchor="middle" font-family="Arial" font-size="18" fill="%239ca3af">Image not available</text></svg>';
-                                  target.style.opacity = "1";
-                                }}
-                              />
-                            </div>
-                            {slide.description && (
-                              <p className="text-gray-300 mt-4 text-lg italic">
-                                {slide.description}
-                              </p>
-                            )}
-                          </div>
-                        ) : slide.type === "formula" ? (
-                          <div className="bg-gray-800 p-6 rounded-lg border border-gray-700">
-                            <code className="text-xl font-mono text-blue-300 block text-center">
-                              {slide.content}
-                            </code>
-                          </div>
-                        ) : (
-                          <div className="text-gray-100 text-xl leading-relaxed">
-                            {slide.content}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {isPlaying && visibleContent.length === 0 && currentTime > 0 && (
-              <div className="text-center py-16">
-                <div className="text-6xl mb-6">⏳</div>
-                <h2 className="text-2xl font-semibold mb-4">
-                  Lesson in Progress...
-                </h2>
-                <p className="text-gray-300 text-lg">
-                  Waiting for the first slide at{" "}
-                  {formatTime(currentLesson.slides[0]?.startTime || 0)}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Video Player Controls - Fixed at Bottom */}
-        <div className="bg-gray-900/95 backdrop-blur-md border-t border-gray-800 p-4">
-          {/* Progress Bar */}
-          <div className="mb-4">
-            <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
-              <div
-                className="bg-blue-500 h-2 rounded-full transition-all duration-200"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    Math.max(
-                      0,
-                      (currentTime / currentLesson.totalDuration) * 100
-                    )
-                  )}%`,
-                }}
-              ></div>
-            </div>
-
-            {/* Slide markers */}
-            <div className="flex justify-between text-xs text-gray-400">
-              {currentLesson.slides.map((slide) => (
-                <div
-                  key={slide.id}
-                  className={`px-2 py-1 rounded text-xs ${
-                    currentTime >= slide.startTime
-                      ? "bg-blue-900/50 text-blue-300"
-                      : "bg-gray-800 text-gray-500"
-                  }`}
-                >
-                  {formatTime(slide.startTime)}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Control Buttons and Info */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={togglePlay}
-                className="flex items-center justify-center w-12 h-12 bg-blue-600 hover:bg-blue-700 rounded-full transition-colors"
-              >
-                {isPlaying ? <Pause size={24} /> : <Play size={24} />}
-              </button>
-
-              <button
-                onClick={resetLesson}
-                className="flex items-center justify-center w-10 h-10 bg-gray-700 hover:bg-gray-600 rounded-full transition-colors"
-              >
-                <RotateCcw size={18} />
-              </button>
-
-              <div className="flex items-center space-x-2 text-gray-300">
-                <Volume2 size={18} />
-                <span className="text-sm font-mono">
-                  {formatTime(Math.max(0, currentTime))} /{" "}
-                  {formatTime(currentLesson.totalDuration)}
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-400">
-                {visibleContent.length} of {currentLesson.slides.length} slides
-                visible
-              </div>
-
-              {/* TTS Script Toggle */}
-              {currentLesson.ttsText && (
-                <div className="max-w-xs">
-                  <details className="group">
-                    <summary className="flex items-center space-x-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300">
-                      <Volume2 size={16} />
-                      <span>Script</span>
-                    </summary>
-                    <div className="absolute bottom-full right-4 mb-2 bg-gray-800 border border-gray-700 rounded-lg p-4 max-w-md shadow-xl">
-                      <p className="text-sm text-gray-200 italic leading-relaxed">
-                        "{currentLesson.ttsText}"
-                      </p>
-                    </div>
-                  </details>
-                </div>
-              )}
-            </div>
-          </div>
+          <button
+            onClick={nextSlide}
+            disabled={currentSlide === slides.length - 1}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span>Next</span>
+            <ChevronRight size={20} />
+          </button>
         </div>
       </div>
-    );
-  };
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      {currentView === "database" && (
-        <LessonDatabase
-          lessons={lessons}
-          setCurrentView={setCurrentView}
-          setCurrentLesson={setCurrentLesson}
-          editLesson={editLesson}
-          deleteLesson={deleteLesson}
-        />
-      )}
-      {currentView === "editor" && (
-        <SlideEditor
-          editingLesson={editingLesson}
-          setEditingLesson={setEditingLesson}
-          currentSlideIndex={currentSlideIndex}
-          setCurrentSlideIndex={setCurrentSlideIndex}
-          setCurrentView={setCurrentView}
-          saveLesson={saveLesson}
-          addSlide={addSlide}
-          updateSlide={updateSlide}
-          deleteSlide={deleteSlide}
-          formatTime={formatTime}
-        />
-      )}
-      {currentView === "preview" && currentLesson && (
-        <LessonPreview
-          currentLesson={currentLesson}
-          setCurrentView={setCurrentView}
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          visibleContent={visibleContent}
-          togglePlay={togglePlay}
-          resetLesson={resetLesson}
-          formatTime={formatTime}
-          ttsSupported={ttsSupported}
-        />
+      {/* Hidden file input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+
+      {/* Slide Type Modal */}
+      {showSlideTypeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Choose Slide Type</h2>
+            <div className="space-y-3">
+              <button
+                onClick={() => addSlide("basic")}
+                className="w-full p-4 text-left border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <Layout className="text-gray-600" size={24} />
+                  <div>
+                    <div className="font-semibold">Basic Slide</div>
+                    <div className="text-sm text-gray-600">Text and images</div>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => addSlide("quiz")}
+                className="w-full p-4 text-left border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <HelpCircle className="text-blue-600" size={24} />
+                  <div>
+                    <div className="font-semibold">Quiz Slide</div>
+                    <div className="text-sm text-gray-600">
+                      Multiple choice question
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end space-x-2 mt-6">
+              <button
+                onClick={() => setShowSlideTypeModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 };
 
-export default LessonManagementSystem;
+export default CanvasPowerPoint;
