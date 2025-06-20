@@ -1,547 +1,1161 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
-import { useEffect, useState } from "react";
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
-import { RefreshCw, Folder, BarChart3 } from "lucide-react";
-import * as XLSX from "xlsx";
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Trash2,
+  Type,
+  Image,
+  HelpCircle,
+  Layout,
+  Check,
+  X,
+  Play,
+  Download,
+} from "lucide-react";
 
-const SimpleExcelDashboard = () => {
-  type DataItem = {
-    [key: string]: string | number | boolean | undefined;
+const HomePage = () => {
+  const [slides, setSlides] = useState<any>([
+    {
+      id: 1,
+      type: "basic",
+      elements: [
+        {
+          id: "title-1",
+          type: "text",
+          content: "Welcome to Canvas PowerPoint",
+          x: 100,
+          y: 100,
+          width: 600,
+          height: 80,
+          fontSize: 48,
+          fontWeight: "bold",
+          color: "#1f2937",
+        },
+        {
+          id: "content-1",
+          type: "text",
+          content: "Now with Quiz slides! Try adding one.",
+          x: 100,
+          y: 200,
+          width: 500,
+          height: 60,
+          fontSize: 24,
+          fontWeight: "normal",
+          color: "#6b7280",
+        },
+      ],
+    },
+  ]);
+
+  const [currentSlide, setCurrentSlide] = useState<any>(0);
+  const [selectedElement, setSelectedElement] = useState<any>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [isResizing, setIsResizing] = useState<boolean>(false);
+  const [dragStart, setDragStart] = useState<any>({ x: 0, y: 0 });
+  const [resizeHandle, setResizeHandle] = useState<any>("");
+  const [showSlideTypeModal, setShowSlideTypeModal] = useState<any>(false);
+  const [isPresentationMode, setIsPresentationMode] = useState<any>(false);
+  const [quizAnswers, setQuizAnswers] = useState<any>({});
+  const [showQuizResults, setShowQuizResults] = useState<any>(false);
+  const canvasRef = useRef<any>(null);
+  const fileInputRef = useRef<any>(null);
+
+  const addSlide: any = (slideType = "basic") => {
+    let newSlide: any;
+
+    if (slideType === "basic") {
+      newSlide = {
+        id: Date.now(),
+        type: "basic",
+        elements: [
+          {
+            id: `title-${Date.now()}`,
+            type: "text",
+            content: "New Slide Title",
+            x: 100,
+            y: 100,
+            width: 500,
+            height: 80,
+            fontSize: 36,
+            fontWeight: "bold",
+            color: "#1f2937",
+          },
+        ],
+      };
+    } else {
+      newSlide = {
+        id: Date.now(),
+        type: "quiz",
+        question: "Enter your question here",
+        choices: [
+          { id: 1, text: "Option A", isCorrect: true },
+          { id: 2, text: "Option B", isCorrect: false },
+          { id: 3, text: "Option C", isCorrect: false },
+          { id: 4, text: "Option D", isCorrect: false },
+        ],
+        explanation: "Explain why this is the correct answer",
+      };
+    }
+
+    setSlides([...slides, newSlide]);
+    setCurrentSlide(slides.length);
+    setShowSlideTypeModal(false);
   };
 
-  type FieldInfo = {
-    name: string;
-    type: "number" | "currency" | "category" | "text";
-    isMetric: boolean;
-    isDimension: boolean;
+  const deleteSlide = () => {
+    if (slides.length > 1) {
+      const newSlides = slides.filter(
+        (_: any, index: any) => index !== currentSlide
+      );
+      setSlides(newSlides);
+      setCurrentSlide(Math.max(0, currentSlide - 1));
+    }
   };
 
-  type FileData = {
-    id: string;
-    name: string;
-    data: DataItem[];
-    fields: FieldInfo[];
-    chart: ChartConfig | null;
+  const addTextElement = () => {
+    if (slides[currentSlide].type !== "basic") return;
+
+    const newElement = {
+      id: `text-${Date.now()}`,
+      type: "text",
+      content: "Click to edit text",
+      x: 200,
+      y: 300,
+      width: 300,
+      height: 50,
+      fontSize: 18,
+      fontWeight: "normal",
+      color: "#374151",
+    };
+
+    const updatedSlides = [...slides];
+    updatedSlides[currentSlide].elements.push(newElement);
+    setSlides(updatedSlides);
+    setSelectedElement(newElement.id);
   };
 
-  interface ChartConfig {
-    type: "bar";
-    title: string;
-    xAxis: string;
-    yAxis: string;
-    data: any[];
-    id: string;
-    fileId: string;
-  }
+  const addImageElement = () => {
+    if (slides[currentSlide].type !== "basic") return;
+    fileInputRef.current?.click();
+  };
 
-  const [files, setFiles] = useState<FileData[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [apiKey, setApiKey] = useState(import.meta.env.VITE_API_LINK_KEY || "");
-  const [folderId, setFolderId] = useState(
-    import.meta.env.VITE_API_LINK_ID || ""
-  );
-  const [error, setError] = useState("");
-  const [loadingProgress, setLoadingProgress] = useState("");
+  const handleImageUpload = (e: any) => {
+    const file: any = e.target.files[0];
+    if (file && file.type.startsWith("image/")) {
+      const reader: any = new FileReader();
+      reader.onload = (event: any) => {
+        const newElement: any = {
+          id: `image-${Date.now()}`,
+          type: "image",
+          src: event.target.result,
+          x: 200,
+          y: 200,
+          width: 300,
+          height: 200,
+        };
 
-  // Improved field analysis
-  const analyzeField = (values: any[], fieldName: string): FieldInfo => {
-    const nonNullValues = values.filter(
-      (v) => v !== null && v !== undefined && v !== "" && v !== "N/A"
+        const updatedSlides = [...slides];
+        updatedSlides[currentSlide].elements.push(newElement);
+        setSlides(updatedSlides);
+        setSelectedElement(newElement.id);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const addChoice = () => {
+    const updatedSlides = [...slides];
+    const newChoiceId =
+      Math.max(...updatedSlides[currentSlide].choices.map((c: any) => c.id)) +
+      1;
+    updatedSlides[currentSlide].choices.push({
+      id: newChoiceId,
+      text: `Option ${String.fromCharCode(64 + newChoiceId)}`,
+      isCorrect: false,
+    });
+    setSlides(updatedSlides);
+  };
+
+  const removeChoice = (choiceId: any) => {
+    const updatedSlides = [...slides];
+    if (updatedSlides[currentSlide].choices.length > 2) {
+      updatedSlides[currentSlide].choices = updatedSlides[
+        currentSlide
+      ].choices.filter((c: any) => c.id !== choiceId);
+      setSlides(updatedSlides);
+    }
+  };
+
+  const updateQuizSlide = (field: any, value: any) => {
+    const updatedSlides = [...slides];
+    updatedSlides[currentSlide][field] = value;
+    setSlides(updatedSlides);
+  };
+
+  const updateChoice = (choiceId: any, field: any, value: any) => {
+    const updatedSlides = [...slides];
+    const choiceIndex = updatedSlides[currentSlide].choices.findIndex(
+      (c: any) => c.id === choiceId
     );
-    const uniqueValues = new Set(nonNullValues).size;
-
-    let type: FieldInfo["type"] = "text";
-    let isMetric = false;
-    let isDimension = false;
-
-    if (nonNullValues.length === 0) {
-      return {
-        name: fieldName,
-        type: "text",
-        isMetric: false,
-        isDimension: false,
-      };
-    }
-
-    // Check if all values are numeric (including decimal numbers)
-    const numericValues = nonNullValues.filter((v) => {
-      const numStr = v.toString().replace(/[$,%]/g, "");
-      return !isNaN(Number(numStr)) && numStr.trim() !== "";
-    });
-
-    // Currency detection
-    if (
-      nonNullValues.some(
-        (v) =>
-          typeof v === "string" &&
-          /^\$?\d+(\.\d{2})?$/.test(v.toString().replace(/,/g, ""))
-      )
-    ) {
-      type = "currency";
-      isMetric = true;
-    }
-    // Number detection - if most values are numeric
-    else if (numericValues.length >= nonNullValues.length * 0.8) {
-      type = "number";
-      isMetric = true;
-    }
-    // Category detection - if we have reasonable number of unique text values
-    else if (
-      uniqueValues > 1 &&
-      uniqueValues <= Math.max(20, nonNullValues.length * 0.7) &&
-      numericValues.length < nonNullValues.length * 0.5
-    ) {
-      type = "category";
-      isDimension = true;
-    }
-
-    // Special handling for common field names
-    const lowerFieldName = fieldName.toLowerCase();
-    if (
-      lowerFieldName.includes("name") ||
-      lowerFieldName.includes("mesin") ||
-      lowerFieldName.includes("category") ||
-      lowerFieldName.includes("type")
-    ) {
-      type = "category";
-      isDimension = true;
-      isMetric = false;
-    }
-
-    if (
-      lowerFieldName.includes("total") ||
-      lowerFieldName.includes("amount") ||
-      lowerFieldName.includes("jam") ||
-      lowerFieldName.includes("hour") ||
-      lowerFieldName.includes("count") ||
-      lowerFieldName.includes("sum")
-    ) {
-      if (numericValues.length > 0) {
-        type = "number";
-        isMetric = true;
-        isDimension = false;
+    if (choiceIndex !== -1) {
+      if (field === "isCorrect" && value) {
+        // Only one correct answer allowed
+        updatedSlides[currentSlide].choices.forEach(
+          (c: any) => (c.isCorrect = false)
+        );
       }
+      updatedSlides[currentSlide].choices[choiceIndex][field] = value;
+      setSlides(updatedSlides);
     }
-
-    return {
-      name: fieldName,
-      type,
-      isMetric,
-      isDimension,
-    };
-  };
-  useEffect(() => {
-    setApiKey(import.meta.env.VITE_API_LINK_KEY || "");
-    setFolderId(import.meta.env.VITE_API_LINK_ID || "");
-    // Automatically fetch files on mount if API key and folder ID are set
-    if (apiKey && folderId) {
-      fetchGoogleDriveFiles();
-    }
-  }, [apiKey, folderId]);
-  // Generate single bar chart per file
-  const generateBarChart = (
-    data: DataItem[],
-    fields: FieldInfo[],
-    fileName: string,
-    fileId: string
-  ): ChartConfig | null => {
-    const metrics = fields.filter((f) => f.isMetric);
-    const dimensions = fields.filter((f) => f.isDimension);
-
-    console.log(`File: ${fileName}`);
-    console.log("Fields analysis:", fields);
-    console.log("Metrics:", metrics);
-    console.log("Dimensions:", dimensions);
-
-    if (metrics.length === 0 || dimensions.length === 0) {
-      return null;
-    }
-
-    const metric = metrics[0]; // Take first metric
-    const dimension = dimensions[0]; // Take first dimension
-
-    // Aggregate data by dimension
-    const aggregated: { [key: string]: number } = {};
-    data.forEach((row) => {
-      const cat = (row[dimension.name] as string) || "Unknown";
-      const val =
-        parseFloat(String(row[metric.name]).replace(/[$,%]/g, "")) || 0;
-      aggregated[cat] = (aggregated[cat] || 0) + val;
-    });
-
-    const chartData = Object.entries(aggregated)
-      .map(([name, value]) => ({
-        [dimension.name]: name,
-        [metric.name]: value,
-      }))
-      .sort((a: any, b: any) => b[metric.name] - a[metric.name])
-      .slice(0, 10);
-
-    return {
-      id: `${fileId}-bar`,
-      fileId,
-      type: "bar",
-      title: `${metric.name} by ${dimension.name}`,
-      xAxis: dimension.name,
-      yAxis: metric.name,
-      data: chartData,
-    };
   };
 
-  // Process file data
-  const processFileData = (
-    rawData: DataItem[],
-    fileName: string,
-    fileId: string
-  ): FileData => {
-    if (!rawData || rawData.length === 0) {
-      return {
-        id: fileId,
-        name: fileName,
-        data: [],
-        fields: [],
-        chart: null,
-      };
+  const deleteElement = () => {
+    if (selectedElement && slides[currentSlide].type === "basic") {
+      const updatedSlides = [...slides];
+      updatedSlides[currentSlide].elements = updatedSlides[
+        currentSlide
+      ].elements.filter((el: any) => el.id !== selectedElement);
+      setSlides(updatedSlides);
+      setSelectedElement(null);
     }
+  };
 
-    // Clean and normalize data
-    const cleanedData = rawData.map((row) => {
-      const cleanRow: any = {};
-      Object.keys(row).forEach((key) => {
-        const cleanKey = key.toString().trim();
-        let value = row[key];
-
-        if (typeof value === "string") {
-          value = value.trim();
-          // Try to parse numbers (including decimals)
-          const numValue = parseFloat(value.replace(/[$,]/g, ""));
-          if (!isNaN(numValue) && value.match(/^\$?[\d,.]+$/)) {
-            value = numValue;
-          }
+  const updateElement = useCallback(
+    (elementId: any, updates: any) => {
+      setSlides((prevSlides: any) => {
+        const updatedSlides = [...prevSlides];
+        const elementIndex = updatedSlides[currentSlide].elements.findIndex(
+          (el: any) => el.id === elementId
+        );
+        if (elementIndex !== -1) {
+          updatedSlides[currentSlide].elements[elementIndex] = {
+            ...updatedSlides[currentSlide].elements[elementIndex],
+            ...updates,
+          };
         }
-
-        cleanRow[cleanKey] = value;
+        return updatedSlides;
       });
-      return cleanRow;
-    });
+    },
+    [currentSlide]
+  );
 
-    // Analyze all fields
-    const fieldNames = Object.keys(cleanedData[0] || {});
-    const fields = fieldNames.map((name) => {
-      const values = cleanedData.map((row) => row[name]);
-      return analyzeField(values, name);
-    });
+  const handleMouseDown = (e: any, elementId: any) => {
+    if (slides[currentSlide].type !== "basic" || isPresentationMode) return;
 
-    const chart = generateBarChart(cleanedData, fields, fileName, fileId);
+    e.preventDefault();
+    e.stopPropagation(); // Add this
+    setSelectedElement(elementId);
 
-    return {
-      id: fileId,
-      name: fileName,
-      data: cleanedData,
-      fields,
-      chart,
-    };
-  };
+    const rect = canvasRef.current.getBoundingClientRect();
+    const element = slides[currentSlide].elements.find(
+      (el: any) => el.id === elementId
+    );
 
-  // Download and parse Excel file
-  const downloadAndParseExcel = async (fileId: string, fileName: string) => {
-    try {
-      setLoadingProgress(`Processing ${fileName}...`);
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-      // Download file content
-      const downloadResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`
-      );
+    // Check if clicking on resize handle
+    const handles = getResizeHandles(element);
+    const clickedHandle = handles.find(
+      (handle) =>
+        mouseX >= handle.x - 5 &&
+        mouseX <= handle.x + 5 &&
+        mouseY >= handle.y - 5 &&
+        mouseY <= handle.y + 5
+    );
 
-      if (!downloadResponse.ok) {
-        throw new Error(
-          `Failed to download ${fileName}: ${downloadResponse.status}`
-        );
-      }
-
-      // Get file as array buffer
-      const arrayBuffer = await downloadResponse.arrayBuffer();
-
-      // Parse with SheetJS
-      const workbook = XLSX.read(arrayBuffer, { type: "array" });
-
-      // Get first worksheet
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-
-      // Convert to JSON
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-      // Convert to proper format (first row as headers)
-      if (jsonData.length < 2) {
-        throw new Error(`${fileName} has insufficient data`);
-      }
-
-      const headers = jsonData[0] as string[];
-      const rows = jsonData.slice(1) as any[][];
-
-      const formattedData = rows.map((row) => {
-        const obj: any = {};
-        headers.forEach((header, index) => {
-          obj[header] = row[index] !== undefined ? row[index] : null;
-        });
-        return obj;
+    if (clickedHandle) {
+      setIsResizing(true);
+      setResizeHandle(clickedHandle.type);
+      setDragStart({ x: mouseX, y: mouseY });
+    } else {
+      setIsDragging(true);
+      setDragStart({
+        x: mouseX - element.x,
+        y: mouseY - element.y,
       });
-
-      return processFileData(formattedData, fileName, fileId);
-    } catch (error: any) {
-      console.error(`Error processing ${fileName}:`, error);
-      return {
-        id: fileId,
-        name: fileName,
-        data: [],
-        fields: [],
-        chart: null,
-        error: error.message,
-      };
     }
   };
 
-  // Fetch files from Google Drive and parse them
-  const fetchGoogleDriveFiles = async () => {
-    if (!apiKey || !folderId) {
-      setError("Please provide both API Key and Folder ID");
+  const handleMouseMove = (e: any) => {
+    if (
+      !selectedElement ||
+      (!isDragging && !isResizing) ||
+      slides[currentSlide].type !== "basic" ||
+      isPresentationMode
+    )
       return;
+
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    const element = slides[currentSlide].elements.find(
+      (el: any) => el.id === selectedElement
+    );
+
+    if (isDragging) {
+      updateElement(selectedElement, {
+        x: Math.max(0, mouseX - dragStart.x),
+        y: Math.max(0, mouseY - dragStart.y),
+      });
+    } else if (isResizing) {
+      const deltaX = mouseX - dragStart.x;
+      const deltaY = mouseY - dragStart.y;
+
+      let updates = {};
+
+      switch (resizeHandle) {
+        case "se":
+          updates = {
+            width: Math.max(50, element.width + deltaX),
+            height: Math.max(30, element.height + deltaY),
+          };
+          break;
+        case "sw":
+          updates = {
+            x: element.x + deltaX,
+            width: Math.max(50, element.width - deltaX),
+            height: Math.max(30, element.height + deltaY),
+          };
+          break;
+        case "ne":
+          updates = {
+            y: element.y + deltaY,
+            width: Math.max(50, element.width + deltaX),
+            height: Math.max(30, element.height - deltaY),
+          };
+          break;
+        case "nw":
+          updates = {
+            x: element.x + deltaX,
+            y: element.y + deltaY,
+            width: Math.max(50, element.width - deltaX),
+            height: Math.max(30, element.height - deltaY),
+          };
+          break;
+      }
+
+      updateElement(selectedElement, updates);
+      setDragStart({ x: mouseX, y: mouseY });
     }
+  };
 
-    setIsLoading(true);
-    setError("");
-    setLoadingProgress("Connecting to Google Drive...");
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setResizeHandle("");
+  };
 
-    try {
-      // Test API access
-      const testResponse = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${folderId}?key=${apiKey}&fields=id,name`
-      );
+  const getResizeHandles = (element: any) => {
+    if (!element) return [];
 
-      if (!testResponse.ok) {
-        const errorData = await testResponse.json();
-        throw new Error(
-          `API Test Failed (${testResponse.status}): ${
-            errorData.error?.message || "Invalid API key or folder access"
-          }`
-        );
-      }
+    return [
+      { type: "nw", x: element.x, y: element.y },
+      { type: "ne", x: element.x + element.width, y: element.y },
+      { type: "sw", x: element.x, y: element.y + element.height },
+      {
+        type: "se",
+        x: element.x + element.width,
+        y: element.y + element.height,
+      },
+    ];
+  };
 
-      setLoadingProgress("Fetching Excel files list...");
+  const handleTextEdit = (elementId: any, newContent: any) => {
+    updateElement(elementId, { content: newContent });
+  };
 
-      // Fetch Excel files
-      const query = encodeURIComponent(
-        `'${folderId}' in parents and (name contains '.xlsx' or name contains '.xls')`
-      );
-      const response = await fetch(
-        `https://www.googleapis.com/drive/v3/files?q=${query}&key=${apiKey}&fields=files(id,name,mimeType,size)`
-      );
+  const nextSlide = () =>
+    setCurrentSlide((prev: any) => (prev + 1) % slides.length);
+  const prevSlide = () =>
+    setCurrentSlide((prev: any) => (prev - 1 + slides.length) % slides.length);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          `HTTP ${response.status}: ${
-            errorData.error?.message || "Request failed"
-          }`
-        );
-      }
+  const handleQuizAnswer = (slideId: any, choiceId: any) => {
+    setQuizAnswers((prev: any) => ({
+      ...prev,
+      [slideId]: choiceId,
+    }));
+  };
 
-      const result = await response.json();
+  const togglePresentationMode = () => {
+    setIsPresentationMode(!isPresentationMode);
+    setSelectedElement(null);
+    setQuizAnswers({});
+    setShowQuizResults(false);
+  };
 
-      if (result.error) {
-        throw new Error(`API Error: ${result.error.message}`);
-      }
+  const exportPresentation = () => {
+    const dataStr = JSON.stringify(slides, null, 2);
+    const dataUri =
+      "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
 
-      const excelFiles = result.files || [];
+    const exportFileDefaultName = "presentation.json";
 
-      if (excelFiles.length === 0) {
-        setError("No Excel files found in the specified folder");
-        setIsLoading(false);
+    const linkElement = document.createElement("a");
+    linkElement.setAttribute("href", dataUri);
+    linkElement.setAttribute("download", exportFileDefaultName);
+    linkElement.click();
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: any) => {
+      if (isPresentationMode) {
+        if (e.key === "ArrowRight" || e.key === " ") nextSlide();
+        if (e.key === "ArrowLeft") prevSlide();
+        if (e.key === "Escape") togglePresentationMode();
         return;
       }
 
-      setLoadingProgress(
-        `Found ${excelFiles.length} Excel files. Processing...`
-      );
-
-      // Download and parse each Excel file
-      const processedFiles: FileData[] = [];
-
-      for (let i = 0; i < excelFiles.length; i++) {
-        const file = excelFiles[i];
-        setLoadingProgress(
-          `Processing ${file.name} (${i + 1}/${excelFiles.length})...`
-        );
-
-        const fileData = await downloadAndParseExcel(file.id, file.name);
-        processedFiles.push(fileData);
+      if (
+        e.key === "Delete" &&
+        selectedElement &&
+        slides[currentSlide].type === "basic"
+      ) {
+        deleteElement();
       }
-
-      setFiles(processedFiles);
-      setLoadingProgress("");
-
-      const successfulFiles = processedFiles.filter((f) => f.data.length > 0);
-      const failedFiles = processedFiles.filter((f) => f.data.length === 0);
-
-      if (successfulFiles.length === 0) {
-        setError(
-          "No files could be processed successfully. Check file formats and permissions."
-        );
-      } else if (failedFiles.length > 0) {
-        setError(
-          `${successfulFiles.length} files processed successfully. ${failedFiles.length} files failed to process.`
-        );
+      if (e.key === "Escape") {
+        setSelectedElement(null);
       }
-    } catch (error: any) {
-      setError(`Error: ${error.message}`);
-      setLoadingProgress("");
-    } finally {
-      setIsLoading(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedElement, currentSlide, isPresentationMode]);
+
+  const currentSlideData = slides[currentSlide];
+  const selectedElementData = useMemo(() => {
+    if (
+      !selectedElement ||
+      currentSlideData.type !== "basic" ||
+      !currentSlideData.elements
+    ) {
+      return null;
     }
-  };
-
-  // Render bar chart
-  const renderBarChart = (config: ChartConfig) => {
-    const colors = ["#8884d8", "#82ca9d", "#ffc658", "#ff7300", "#0088fe"];
-
     return (
-      <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-xl transition-shadow">
-        <div className="flex items-center space-x-3 mb-4">
-          <BarChart3 className="w-5 h-5 text-blue-600" />
-          <h3 className="text-lg font-semibold text-gray-800">
-            {config.title}
-          </h3>
+      currentSlideData.elements.find((el: any) => el.id === selectedElement) ||
+      null
+    );
+  }, [selectedElement, currentSlideData.elements]);
+  const renderBasicSlide = () => (
+    <div
+      ref={canvasRef}
+      className={`w-[900px] h-[600px] bg-white rounded-lg shadow-lg relative overflow-hidden ${
+        isPresentationMode ? "cursor-default" : "cursor-crosshair"
+      }`}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+      onClick={(e) => {
+        // Only clear selection if clicking on the canvas itself, not child elements
+        if (!isPresentationMode && e.target === e.currentTarget) {
+          setSelectedElement(null);
+        }
+      }}
+    >
+      {currentSlideData.elements?.map((element: any) => (
+        <div key={element.id}>
+          {element.type === "text" ? (
+            <div
+              className={`absolute select-none ${
+                isPresentationMode ? "cursor-default" : "cursor-move"
+              } ${
+                selectedElement === element.id && !isPresentationMode
+                  ? "ring-2 ring-blue-500"
+                  : ""
+              }`}
+              style={{
+                left: element.x,
+                top: element.y,
+                width: element.width,
+                height: element.height,
+                fontSize: element.fontSize,
+                fontWeight: element.fontWeight,
+                color: element.color,
+                padding: "8px",
+              }}
+              onMouseDown={(e) =>
+                !isPresentationMode && handleMouseDown(e, element.id)
+              }
+            >
+              <div
+                contentEditable={!isPresentationMode}
+                suppressContentEditableWarning={true}
+                onBlur={(e) => {
+                  if (!isPresentationMode) {
+                    handleTextEdit(element.id, e.target.textContent);
+                  }
+                }}
+                className={`outline-none w-full h-full ${
+                  isPresentationMode ? "pointer-events-none" : ""
+                }`}
+              >
+                {element.content}
+              </div>
+            </div>
+          ) : (
+            <img
+              src={element.src}
+              alt="Slide element"
+              className={`absolute select-none object-cover pointer-events-auto ${
+                isPresentationMode ? "cursor-default" : "cursor-move"
+              } ${
+                selectedElement === element.id && !isPresentationMode
+                  ? "ring-2 ring-blue-500"
+                  : ""
+              }`}
+              style={{
+                left: element.x,
+                top: element.y,
+                width: element.width,
+                height: element.height,
+              }}
+              onMouseDown={(e) => {
+                e.stopPropagation(); // Prevent canvas click
+                !isPresentationMode && handleMouseDown(e, element.id);
+              }}
+              draggable={false}
+            />
+          )}
+
+          {selectedElement === element.id && !isPresentationMode && (
+            <>
+              {getResizeHandles(element).map((handle) => (
+                <div
+                  key={handle.type}
+                  className="absolute w-2 h-2 bg-blue-500 border border-white cursor-nw-resize z-10"
+                  style={{
+                    left: handle.x - 4,
+                    top: handle.y - 4,
+                    cursor: `${handle.type}-resize`,
+                    pointerEvents: "auto", // Ensure handles are clickable
+                  }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    setIsResizing(true);
+                    setResizeHandle(handle.type);
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    setDragStart({
+                      x: e.clientX - rect.left,
+                      y: e.clientY - rect.top,
+                    });
+                  }}
+                />
+              ))}
+            </>
+          )}
         </div>
-        <ResponsiveContainer width="100%" height={350}>
-          <BarChart data={config.data}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={config.xAxis} />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey={config.yAxis} fill={colors[0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      ))}
+    </div>
+  );
+
+  const renderQuizSlide = () => {
+    if (isPresentationMode) {
+      const userAnswer = quizAnswers[currentSlideData.id];
+      const isAnswered = userAnswer !== undefined;
+      const correctChoice = currentSlideData.choices.find(
+        (c: any) => c.isCorrect
+      );
+      const isCorrect = isAnswered && userAnswer === correctChoice.id;
+
+      return (
+        <div className="w-[900px] h-[600px] bg-white rounded-lg shadow-lg p-8 overflow-y-auto">
+          <div className="mb-8">
+            <div className="flex items-center mb-4">
+              <HelpCircle className="text-blue-500 mr-2" size={32} />
+              <h2 className="text-3xl font-bold text-gray-800">
+                Quiz Question
+              </h2>
+            </div>
+            <div className="text-2xl text-gray-700 mb-8 p-4 bg-gray-50 rounded-lg">
+              {currentSlideData.question}
+            </div>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            {currentSlideData.choices.map((choice: any, index: any) => (
+              <button
+                key={choice.id}
+                onClick={() =>
+                  !isAnswered &&
+                  handleQuizAnswer(currentSlideData.id, choice.id)
+                }
+                disabled={isAnswered}
+                className={`w-full p-4 text-left rounded-lg border-2 transition-all text-lg ${
+                  isAnswered
+                    ? choice.isCorrect
+                      ? "bg-green-100 border-green-500 text-green-800"
+                      : userAnswer === choice.id
+                      ? "bg-red-100 border-red-500 text-red-800"
+                      : "bg-gray-100 border-gray-300 text-gray-600"
+                    : userAnswer === choice.id
+                    ? "bg-blue-100 border-blue-500"
+                    : "bg-white border-gray-300 hover:border-blue-400 hover:bg-blue-50"
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                      isAnswered
+                        ? choice.isCorrect
+                          ? "bg-green-500 text-white"
+                          : userAnswer === choice.id
+                          ? "bg-red-500 text-white"
+                          : "bg-gray-300 text-gray-600"
+                        : userAnswer === choice.id
+                        ? "bg-blue-500 text-white"
+                        : "bg-gray-200 text-gray-700"
+                    }`}
+                  >
+                    {String.fromCharCode(65 + index)}
+                  </div>
+                  <span>{choice.text}</span>
+                  {isAnswered && choice.isCorrect && (
+                    <Check className="ml-auto text-green-500" size={20} />
+                  )}
+                  {isAnswered &&
+                    userAnswer === choice.id &&
+                    !choice.isCorrect && (
+                      <X className="ml-auto text-red-500" size={20} />
+                    )}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {isAnswered && currentSlideData.explanation && (
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <h3 className="font-semibold text-blue-800 mb-2">Explanation:</h3>
+              <p className="text-blue-700">{currentSlideData.explanation}</p>
+            </div>
+          )}
+
+          {isAnswered && (
+            <div
+              className={`mt-4 p-4 rounded-lg text-center ${
+                isCorrect
+                  ? "bg-green-100 text-green-800"
+                  : "bg-red-100 text-red-800"
+              }`}
+            >
+              <div className="text-xl font-bold">
+                {isCorrect ? "✓ Correct!" : "✗ Incorrect"}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Edit mode for quiz slides
+    return (
+      <div className="w-[900px] h-[600px] bg-white rounded-lg shadow-lg p-8 overflow-y-auto">
+        {/* Question */}
+        <div className="mb-8">
+          <div className="flex items-center mb-4">
+            <HelpCircle className="text-blue-500 mr-2" size={24} />
+            <h2 className="text-2xl font-bold text-gray-800">Question</h2>
+          </div>
+          <textarea
+            value={currentSlideData.question}
+            onChange={(e: any) => updateQuizSlide("question", e.target.value)}
+            className="w-full p-4 text-xl border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none resize-none"
+            rows={3}
+            placeholder="Enter your question here..."
+          />
+        </div>
+
+        {/* Choices */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-700">
+              Answer Choices
+            </h3>
+            <button
+              onClick={addChoice}
+              className="flex items-center space-x-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors text-sm"
+            >
+              <Plus size={14} />
+              <span>Add Choice</span>
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {currentSlideData.choices.map((choice: any, index: any) => (
+              <div
+                key={choice.id}
+                className="flex items-center space-x-3 p-3 border rounded-lg"
+              >
+                <div className="flex items-center space-x-2">
+                  <span className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center text-sm font-semibold">
+                    {String.fromCharCode(65 + index)}
+                  </span>
+                  <input
+                    type="radio"
+                    name="correct-answer"
+                    checked={choice.isCorrect}
+                    onChange={(e) =>
+                      updateChoice(choice.id, "isCorrect", e.target.checked)
+                    }
+                    className="text-green-500"
+                  />
+                  <label className="text-sm text-gray-600">Correct</label>
+                </div>
+
+                <input
+                  type="text"
+                  value={choice.text}
+                  onChange={(e) =>
+                    updateChoice(choice.id, "text", e.target.value)
+                  }
+                  className="flex-1 p-2 border border-gray-200 rounded focus:border-blue-500 outline-none"
+                  placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                />
+
+                {currentSlideData.choices.length > 2 && (
+                  <button
+                    onClick={() => removeChoice(choice.id)}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded"
+                  >
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Explanation */}
+        <div>
+          <h3 className="text-lg font-semibold text-gray-700 mb-3">
+            Explanation (Optional)
+          </h3>
+          <textarea
+            value={currentSlideData.explanation}
+            onChange={(e) => updateQuizSlide("explanation", e.target.value)}
+            className="w-full p-4 border-2 border-gray-200 rounded-lg focus:border-blue-500 outline-none resize-none"
+            rows={3}
+            placeholder="Explain why this answer is correct..."
+          />
+        </div>
       </div>
     );
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center space-x-3">
-              <Folder className="w-8 h-8 text-blue-600" />
-              <div>
-                <h1 className="text-3xl font-bold text-gray-800">
-                  Excel Dashboard
-                </h1>
-                <p className="text-gray-600">
-                  Direct Excel reading with automatic chart generation
-                </p>
-              </div>
-            </div>
+  if (isPresentationMode) {
+    return (
+      <div className="min-h-screen bg-black text-white flex flex-col">
+        {/* Presentation Header */}
+        <div className="bg-gray-900 px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <h1 className="text-lg font-bold">Presentation Mode</h1>
+            <span className="text-sm text-gray-400">
+              Slide {currentSlide + 1} of {slides.length}
+            </span>
+          </div>
+          <button
+            onClick={togglePresentationMode}
+            className="flex items-center space-x-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+          >
+            <X size={16} />
+            <span>Exit</span>
+          </button>
+        </div>
+
+        {/* Slide Content */}
+        <div className="flex-1 flex items-center justify-center p-8">
+          {currentSlideData.type === "basic"
+            ? renderBasicSlide()
+            : renderQuizSlide()}
+        </div>
+
+        {/* Navigation */}
+        <div className="bg-gray-900 p-4 flex items-center justify-center space-x-4">
+          <button
+            onClick={prevSlide}
+            disabled={currentSlide === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={20} />
+            <span>Previous</span>
+          </button>
+
+          <div className="flex space-x-2">
+            {slides.map((_: any, index: any) => (
+              <button
+                key={index}
+                onClick={() => setCurrentSlide(index)}
+                className={`w-3 h-3 rounded-full ${
+                  currentSlide === index ? "bg-white" : "bg-gray-600"
+                }`}
+              />
+            ))}
           </div>
 
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
+          <button
+            onClick={nextSlide}
+            disabled={currentSlide === slides.length - 1}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span>Next</span>
+            <ChevronRight size={20} />
+          </button>
+        </div>
 
-          {/* File Summary */}
-          {files.length > 0 && (
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold mb-4">
-                Loaded Files ({files.length})
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {files.map((file) => (
-                  <div key={file.id} className="bg-gray-50 rounded-lg p-4">
-                    <h4 className="font-medium text-gray-800 mb-2">
-                      {file.name}
-                    </h4>
-                    <p className="text-sm text-gray-600">
-                      {file.data.length} rows, {file.fields.length} columns
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Chart:{" "}
-                      {file.chart ? "✅ Generated" : "❌ No suitable data"}
-                    </p>
-                    {file.fields.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-xs text-gray-500">
-                          Metrics:{" "}
-                          {file.fields
-                            .filter((f) => f.isMetric)
-                            .map((f) => f.name)
-                            .join(", ") || "None"}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Categories:{" "}
-                          {file.fields
-                            .filter((f) => f.isDimension)
-                            .map((f) => f.name)
-                            .join(", ") || "None"}
-                        </p>
-                      </div>
+        <div className="bg-gray-900 px-6 py-2 text-xs text-gray-400 text-center">
+          Use arrow keys or space to navigate • ESC to exit presentation mode
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex flex-col">
+      {/* Header */}
+      <div className="bg-white shadow-sm border-b px-6 py-3">
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-gray-800">Canvas PowerPoint</h1>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-gray-600">
+              Slide {currentSlide + 1} of {slides.length}
+            </span>
+
+            <button
+              onClick={togglePresentationMode}
+              className="flex items-center space-x-1 px-3 py-1 bg-indigo-500 text-white rounded hover:bg-indigo-600 transition-colors"
+            >
+              <Play size={16} />
+              <span>Present</span>
+            </button>
+
+            <button
+              onClick={exportPresentation}
+              className="flex items-center space-x-1 px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            >
+              <Download size={16} />
+              <span>Export</span>
+            </button>
+
+            {/* Basic Slide Tools */}
+            {currentSlideData.type === "basic" && (
+              <>
+                <button
+                  onClick={addTextElement}
+                  className="flex items-center space-x-1 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors"
+                >
+                  <Type size={16} />
+                  <span>Text</span>
+                </button>
+                <button
+                  onClick={addImageElement}
+                  className="flex items-center space-x-1 px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 transition-colors"
+                >
+                  <Image size={16} />
+                  <span>Image</span>
+                </button>
+              </>
+            )}
+
+            <button
+              onClick={() => setShowSlideTypeModal(true)}
+              className="flex items-center space-x-1 px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              <Plus size={16} />
+              <span>Add Slide</span>
+            </button>
+
+            {slides.length > 1 && (
+              <button
+                onClick={deleteSlide}
+                // Continue from your delete button:
+                className="flex items-center space-x-1 px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
+              >
+                <Trash2 size={16} />
+                <span>Delete</span>
+              </button>
+            )}
+
+            {selectedElement && currentSlideData.type === "basic" && (
+              <button
+                onClick={deleteElement}
+                className="flex items-center space-x-1 px-3 py-1 bg-red-400 text-white rounded hover:bg-red-500 transition-colors"
+              >
+                <Trash2 size={16} />
+                <span>Delete Element</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex">
+        {/* Slide Thumbnails */}
+        <div className="w-64 bg-white border-r p-4 overflow-y-auto">
+          <h3 className="text-sm font-semibold text-gray-600 mb-3">
+            Slides {showQuizResults}
+          </h3>
+          <div className="space-y-2">
+            {slides.map((slide: any, index: any) => (
+              <div
+                key={slide.id}
+                onClick={() => setCurrentSlide(index)}
+                className={`w-full h-32 border-2 rounded-lg cursor-pointer transition-all ${
+                  currentSlide === index
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                <div className="p-2 h-full flex flex-col justify-between">
+                  <div className="flex items-center space-x-2">
+                    {slide.type === "quiz" ? (
+                      <HelpCircle size={16} className="text-blue-500" />
+                    ) : (
+                      <Layout size={16} className="text-gray-500" />
                     )}
+                    <span className="text-xs text-gray-600">
+                      {slide.type === "quiz" ? "Quiz" : "Basic"}
+                    </span>
                   </div>
-                ))}
+                  <div className="text-xs text-gray-500 text-center">
+                    Slide {index + 1}
+                  </div>
+                </div>
               </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Canvas Area */}
+        <div className="flex-1 flex items-center justify-center p-8">
+          {currentSlideData.type === "basic"
+            ? renderBasicSlide()
+            : renderQuizSlide()}
+        </div>
+
+        {/* Properties Panel - Always visible */}
+        <div className="w-80 bg-white border-l p-4">
+          <h3 className="text-lg font-semibold mb-4">Properties</h3>
+
+          {selectedElementData && currentSlideData.type === "basic" ? (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Font Size
+                </label>
+                <input
+                  type="number"
+                  value={selectedElementData.fontSize || 18}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      fontSize: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  min="8"
+                  max="72"
+                />
+              </div>
+
+              {/* Rest of your existing properties controls */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Font Weight
+                </label>
+                <select
+                  value={selectedElementData.fontWeight || "normal"}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      fontWeight: e.target.value,
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="normal">Normal</option>
+                  <option value="bold">Bold</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Color
+                </label>
+                <input
+                  type="color"
+                  value={selectedElementData.color || "#000000"}
+                  onChange={(e) =>
+                    updateElement(selectedElement, { color: e.target.value })
+                  }
+                  className="w-full h-10 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    X Position
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.x || 0}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        x: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Y Position
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.y || 0}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        y: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Width
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.width || 100}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        width: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Height
+                  </label>
+                  <input
+                    type="number"
+                    value={selectedElementData.height || 50}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        height: parseInt(e.target.value),
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 mt-8">
+              <div className="mb-4">
+                <Type size={48} className="mx-auto text-gray-300" />
+              </div>
+              <p className="text-sm">
+                {currentSlideData.type === "quiz"
+                  ? "Quiz slides don't have editable elements"
+                  : "Select an element to edit its properties"}
+              </p>
             </div>
           )}
         </div>
-
-        {/* Charts Section */}
-        {files.some((f) => f.chart) && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">
-                Generated Charts ({files.filter((f) => f.chart).length})
-              </h2>
-            </div>
-
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {files
-                .filter((file) => file.chart)
-                .map((file) => (
-                  <div key={file.id}>
-                    {file.chart && renderBarChart(file.chart)}
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Loading State */}
-        {isLoading && (
-          <div className="bg-white rounded-xl shadow-lg p-12 text-center">
-            <RefreshCw className="w-16 h-16 text-blue-600 mx-auto mb-4 animate-spin" />
-            <h3 className="text-xl font-semibold text-gray-800 mb-2">
-              Processing Excel Files...
-            </h3>
-            <p className="text-gray-600">
-              {loadingProgress || "Downloading and parsing Excel data"}
-            </p>
-          </div>
-        )}
       </div>
+
+      {/* Navigation */}
+      <div className="bg-white border-t px-6 py-3">
+        <div className="flex items-center justify-center space-x-4">
+          <button
+            onClick={prevSlide}
+            disabled={currentSlide === 0}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft size={20} />
+            <span>Previous</span>
+          </button>
+
+          <span className="text-sm text-gray-600">
+            {currentSlide + 1} / {slides.length}
+          </span>
+
+          <button
+            onClick={nextSlide}
+            disabled={currentSlide === slides.length - 1}
+            className="flex items-center space-x-2 px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <span>Next</span>
+            <ChevronRight size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Hidden file input for image upload */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        className="hidden"
+      />
+
+      {/* Slide Type Modal */}
+      {showSlideTypeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-bold mb-4">Choose Slide Type</h2>
+            <div className="space-y-3">
+              <button
+                onClick={() => addSlide("basic")}
+                className="w-full p-4 text-left border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <Layout className="text-gray-600" size={24} />
+                  <div>
+                    <div className="font-semibold">Basic Slide</div>
+                    <div className="text-sm text-gray-600">Text and images</div>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => addSlide("quiz")}
+                className="w-full p-4 text-left border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
+              >
+                <div className="flex items-center space-x-3">
+                  <HelpCircle className="text-blue-600" size={24} />
+                  <div>
+                    <div className="font-semibold">Quiz Slide</div>
+                    <div className="text-sm text-gray-600">
+                      Multiple choice question
+                    </div>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div className="flex justify-end space-x-2 mt-6">
+              <button
+                onClick={() => setShowSlideTypeModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default SimpleExcelDashboard;
+export default HomePage;
