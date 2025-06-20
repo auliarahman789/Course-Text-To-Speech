@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -11,7 +11,6 @@ import {
   Check,
   X,
   Play,
-  Download,
 } from "lucide-react";
 
 const HomePage = () => {
@@ -60,7 +59,8 @@ const HomePage = () => {
   const [showQuizResults, setShowQuizResults] = useState<any>(false);
   const canvasRef = useRef<any>(null);
   const fileInputRef = useRef<any>(null);
-
+  const [isEditingText, setIsEditingText] = useState(false);
+  console.log(isEditingText);
   const addSlide: any = (slideType = "basic") => {
     let newSlide: any;
 
@@ -363,10 +363,6 @@ const HomePage = () => {
     ];
   };
 
-  const handleTextEdit = (elementId: any, newContent: any) => {
-    updateElement(elementId, { content: newContent });
-  };
-
   const nextSlide = () =>
     setCurrentSlide((prev: any) => (prev + 1) % slides.length);
   const prevSlide = () =>
@@ -386,19 +382,59 @@ const HomePage = () => {
     setShowQuizResults(false);
   };
 
-  const exportPresentation = () => {
-    const dataStr = JSON.stringify(slides, null, 2);
-    const dataUri =
-      "data:application/json;charset=utf-8," + encodeURIComponent(dataStr);
-
-    const exportFileDefaultName = "presentation.json";
-
-    const linkElement = document.createElement("a");
-    linkElement.setAttribute("href", dataUri);
-    linkElement.setAttribute("download", exportFileDefaultName);
-    linkElement.click();
+  const addTTSElement = () => {
+    if (slides[currentSlide].type !== "basic") return;
+    const newElement = {
+      id: `tts-${Date.now()}`,
+      type: "tts",
+      content: "Hello, this is a TTS message.",
+      voice: "default",
+      volume: 1,
+      rate: 1,
+      fontSize: 16,
+      color: "#000000",
+      backgroundColor: "#fffacc",
+      x: 100,
+      y: 100,
+      width: 300,
+      height: 60,
+    };
+    const updatedSlides = [...slides];
+    updatedSlides[currentSlide].elements.push(newElement);
+    setSlides(updatedSlides);
+    setSelectedElement(newElement.id);
   };
 
+  useEffect(() => {
+    if (!isPresentationMode) return;
+    const ttsElements =
+      slides[currentSlide]?.elements?.filter((el: any) => el.type === "tts") ||
+      [];
+    if (ttsElements.length > 0) {
+      setTimeout(() => {
+        ttsElements.forEach((el: any) =>
+          previewTTS(el.content, el.voice, el.volume, el.rate)
+        );
+      }, 200);
+    }
+  }, [currentSlide, isPresentationMode]);
+
+  const previewTTS = (text: string, voice: string, volume = 1, rate = 1) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voices = speechSynthesis.getVoices();
+    if (voice === "male")
+      utterance.voice =
+        voices.find((v) => v.name.toLowerCase().includes("male")) || null;
+    if (voice === "female")
+      utterance.voice =
+        voices.find((v) => v.name.toLowerCase().includes("female")) || null;
+    if (voice === "robot")
+      utterance.voice =
+        voices.find((v) => v.name.toLowerCase().includes("robot")) || null;
+    utterance.volume = volume;
+    utterance.rate = rate;
+    speechSynthesis.speak(utterance);
+  };
   useEffect(() => {
     const handleKeyDown = (e: any) => {
       if (isPresentationMode) {
@@ -406,6 +442,15 @@ const HomePage = () => {
         if (e.key === "ArrowLeft") prevSlide();
         if (e.key === "Escape") togglePresentationMode();
         return;
+      }
+      if (e.key === "t" || e.key === "T") {
+        if (selectedElement) {
+          setIsEditingText(true);
+        }
+      }
+      if (e.key === "Escape") {
+        setIsEditingText(false);
+        setSelectedElement(null);
       }
 
       if (
@@ -425,19 +470,10 @@ const HomePage = () => {
   }, [selectedElement, currentSlide, isPresentationMode]);
 
   const currentSlideData = slides[currentSlide];
-  const selectedElementData = useMemo(() => {
-    if (
-      !selectedElement ||
-      currentSlideData.type !== "basic" ||
-      !currentSlideData.elements
-    ) {
-      return null;
-    }
-    return (
-      currentSlideData.elements.find((el: any) => el.id === selectedElement) ||
-      null
-    );
-  }, [selectedElement, currentSlideData.elements]);
+  const selectedElementData =
+    slides[currentSlide]?.elements?.find(
+      (el: any) => el.id === selectedElement
+    ) || null;
   const renderBasicSlide = () => (
     <div
       ref={canvasRef}
@@ -456,13 +492,13 @@ const HomePage = () => {
     >
       {currentSlideData.elements?.map((element: any) => (
         <div key={element.id}>
-          {element.type === "text" ? (
+          {element.type === "tts" || element.type === "text" ? (
             <div
-              className={`absolute select-none ${
-                isPresentationMode ? "cursor-default" : "cursor-move"
-              } ${
-                selectedElement === element.id && !isPresentationMode
-                  ? "ring-2 ring-blue-500"
+              className={`absolute select-none group ${
+                selectedElement === element.id
+                  ? element.type === "tts"
+                    ? "ring-2 ring-yellow-500"
+                    : "ring-2 ring-blue-500"
                   : ""
               }`}
               style={{
@@ -472,38 +508,37 @@ const HomePage = () => {
                 height: element.height,
                 fontSize: element.fontSize,
                 fontWeight: element.fontWeight,
+                backgroundColor:
+                  element.type === "tts" ? element.backgroundColor : undefined,
                 color: element.color,
                 padding: "8px",
+                borderRadius: element.type === "tts" ? "4px" : undefined,
+                boxShadow:
+                  element.type === "tts"
+                    ? "0 0 4px rgba(0,0,0,0.1)"
+                    : undefined,
               }}
-              onMouseDown={(e) =>
-                !isPresentationMode && handleMouseDown(e, element.id)
-              }
+              onMouseDown={(e) => handleMouseDown(e, element.id)}
             >
               <div
-                contentEditable={!isPresentationMode}
+                contentEditable={false}
                 suppressContentEditableWarning={true}
-                onBlur={(e) => {
-                  if (!isPresentationMode) {
-                    handleTextEdit(element.id, e.target.textContent);
-                  }
-                }}
-                className={`outline-none w-full h-full ${
-                  isPresentationMode ? "pointer-events-none" : ""
-                }`}
+                className="outline-none w-full h-full pointer-events-none"
               >
                 {element.content}
               </div>
+              {selectedElement === element.id && (
+                <div className="absolute -top-6 left-0 text-xs text-gray-400">
+                  {element.type === "tts" ? "TTS Element" : "Text Element"}
+                </div>
+              )}
             </div>
           ) : (
             <img
               src={element.src}
               alt="Slide element"
               className={`absolute select-none object-cover pointer-events-auto ${
-                isPresentationMode ? "cursor-default" : "cursor-move"
-              } ${
-                selectedElement === element.id && !isPresentationMode
-                  ? "ring-2 ring-blue-500"
-                  : ""
+                selectedElement === element.id ? "ring-2 ring-blue-500" : ""
               }`}
               style={{
                 left: element.x,
@@ -512,13 +547,12 @@ const HomePage = () => {
                 height: element.height,
               }}
               onMouseDown={(e) => {
-                e.stopPropagation(); // Prevent canvas click
+                e.stopPropagation();
                 !isPresentationMode && handleMouseDown(e, element.id);
               }}
               draggable={false}
             />
           )}
-
           {selectedElement === element.id && !isPresentationMode && (
             <>
               {getResizeHandles(element).map((handle) => (
@@ -764,7 +798,7 @@ const HomePage = () => {
         </div>
 
         {/* Slide Content */}
-        <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
           {currentSlideData.type === "basic"
             ? renderBasicSlide()
             : renderQuizSlide()}
@@ -830,11 +864,11 @@ const HomePage = () => {
             </button>
 
             <button
-              onClick={exportPresentation}
-              className="flex items-center space-x-1 px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              onClick={addTTSElement}
+              className="flex items-center space-x-1 px-3 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 transition-colors"
             >
-              <Download size={16} />
-              <span>Export</span>
+              <Type size={16} />
+              <span>TTS</span>
             </button>
 
             {/* Basic Slide Tools */}
@@ -935,12 +969,160 @@ const HomePage = () => {
         </div>
 
         {/* Properties Panel - Always visible */}
-        <div className="w-80 bg-white border-l p-4">
+        <div className="w-80 bg-white border-l p-4 overflow-y-auto max-h-[calc(100vh-6rem)]">
           <h3 className="text-lg font-semibold mb-4">Properties</h3>
+          {selectedElementData?.type === "tts" && (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  TTS Text
+                </label>
+                <textarea
+                  rows={3}
+                  value={selectedElementData.content}
+                  onChange={(e) =>
+                    updateElement(selectedElement, { content: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Voice
+                </label>
+                <select
+                  value={selectedElementData.voice || "default"}
+                  onChange={(e) =>
+                    updateElement(selectedElement, { voice: e.target.value })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                >
+                  <option value="default">Default</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="robot">Robot</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Font Size
+                </label>
+                <input
+                  type="number"
+                  value={selectedElementData.fontSize || 16}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      fontSize: parseInt(e.target.value),
+                    })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Text Color
+                </label>
+                <input
+                  type="color"
+                  value={selectedElementData.color || "#000000"}
+                  onChange={(e) =>
+                    updateElement(selectedElement, { color: e.target.value })
+                  }
+                  className="w-full h-10 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Background
+                </label>
+                <input
+                  type="color"
+                  value={selectedElementData.backgroundColor || "#fffacc"}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      backgroundColor: e.target.value,
+                    })
+                  }
+                  className="w-full h-10 border border-gray-300 rounded-md"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Volume
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={selectedElementData.volume || 1}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      volume: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Speed
+                </label>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2"
+                  step="0.1"
+                  value={selectedElementData.rate || 1}
+                  onChange={(e) =>
+                    updateElement(selectedElement, {
+                      rate: parseFloat(e.target.value),
+                    })
+                  }
+                  className="w-full"
+                />
+              </div>
+
+              <button
+                onClick={() =>
+                  previewTTS(
+                    selectedElementData.content,
+                    selectedElementData.voice,
+                    selectedElementData.volume,
+                    selectedElementData.rate
+                  )
+                }
+                className="w-full px-3 py-2 mt-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              >
+                🔈 Preview TTS
+              </button>
+            </>
+          )}
 
           {selectedElementData && currentSlideData.type === "basic" ? (
             <div className="space-y-4">
               <div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Text Content
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={selectedElementData.content}
+                    onChange={(e) =>
+                      updateElement(selectedElement, {
+                        content: e.target.value,
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  />
+                </div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Font Size
                 </label>
